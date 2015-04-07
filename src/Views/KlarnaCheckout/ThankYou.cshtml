@@ -1,0 +1,11 @@
+﻿@{
+    Layout = "~/Views/Shared/_ColumnsTwo.cshtml";
+}
+
+<div class="features_items my-account-page">
+    <!--features_items-->
+    <h2 class="title">@T("Checkout.ThankYou")</h2>
+    <div class="custom-page-box-div">
+        @Html.Raw(ViewBag.KlarnaSnippet as string)
+    </div>
+</div>
