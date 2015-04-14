@@ -7,7 +7,7 @@ Klarna Checkout plugin for [nopCommerce](http://nopcommerce.codeplex.com/) 3.50.
 - Implemented as a nopCommerce payment method.
 - Test/live mode.
 - Configuration of snippet colors.
-- Automatic activation of the Klarna order when the nop order is marked as delivered.
+- Automatic activation of the Klarna order when the nop order is marked as shipped.
 
 ## Premium Support
  
@@ -21,7 +21,7 @@ Installation can be done either from the precompiled package or directly from so
 
 ### From Package
 
-1. Download zip from the download page.
+1. Download zip from the [release](https://github.com/Motillo/klarna-checkout-nopcommerce/releases) page.
 2. Unzip the content into the `Plugins` folder.
 3. (Optional) Modify views if needed.
 4. Install and configure the plugin through nopCommerce's administration interface.
