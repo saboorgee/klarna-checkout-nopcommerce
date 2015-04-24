@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Nop.Core;
 using Nop.Core.Domain.Catalog;
@@ -391,8 +392,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var combo = _productAttributeParser.FindProductAttributeCombination(product, item.AttributesXml);
             var reference = GetReference(product, combo);
             var name = product.GetLocalized(x => x.Name);
-            var unitPrice = GetIntUnitPriceWithoutDiscount(item);
-            var discountRate = GetIntDiscountRate(item);
+            int discountRate;
+            var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate);
             var taxRate = GetIntTaxRate(item);
 
             var result = new CartItem
@@ -417,24 +418,21 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return ConvertToCents(taxRate);
         }
 
-        private int GetIntDiscountRate(ShoppingCartItem item)
+        private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate)
         {
             decimal discountAmount;
             Discount appliedDiscount;
+            var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscount);
+            discountRate = 0;
 
-            _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscount);
-
-            if (appliedDiscount == null)
+            // Only set discount rate if the discount uses percentage, otherwise
+            // we can't get the exact correct amount since klarna assumes 2 decimals.
+            if (appliedDiscount != null && appliedDiscount.UsePercentage)
             {
-                return 0;
+                unitPrice += discountAmount;
+                discountRate = ConvertToCents(appliedDiscount.DiscountPercentage);
             }
 
-            return ConvertToCents(appliedDiscount.DiscountPercentage);
-        }
-
-        private int GetIntUnitPriceWithoutDiscount(ShoppingCartItem item)
-        {
-            var unitPrice = _priceCalculationService.GetUnitPrice(item, includeDiscounts: false);
             var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(unitPrice, _workContext.WorkingCurrency);
 
             return ConvertToCents(priceInCurrentCurrency);
