@@ -198,7 +198,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
 
             var options = ValidLocales.Where(x => x.PurchaseCountry == purchaseCountry && (enabledCountries.Length == 0 || enabledCountries.Contains(x.PurchaseCountry)) && x.PurchaseCurrency == currency).ToList();
-            var match = options.FirstOrDefault(x => x.Language == language);
+            var match = options.FirstOrDefault(x => x.Locale == language);
             
             return match ?? options.FirstOrDefault();
         }
