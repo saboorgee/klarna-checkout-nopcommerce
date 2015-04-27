@@ -1,5 +1,4 @@
-﻿using System.Web.Mvc;
-using Klarna.Api;
+﻿using Klarna.Api;
 using Klarna.Checkout;
 using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Models;
@@ -101,7 +100,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var gui = _klarnaCheckoutUtils.GetGui();
             var options = _klarnaCheckoutUtils.GetOptions();
             //var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
-
 
             var klarnaOrder = new KlarnaOrder
             {

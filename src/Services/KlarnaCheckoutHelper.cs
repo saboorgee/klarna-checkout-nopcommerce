@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
-using Motillo.Nop.Plugin.KlarnaCheckout.Models;
+﻿using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Nop.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Customers;
@@ -10,12 +8,12 @@ using Nop.Core.Domain.Shipping;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Directory;
-using Nop.Services.Discounts;
 using Nop.Services.Localization;
 using Nop.Services.Orders;
 using Nop.Services.Tax;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 
@@ -32,7 +30,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly ICurrencyService _currencyService;
         private readonly KlarnaCheckoutSettings _klarnaSettings;
-        
+
         // https://developers.klarna.com/en/api-references-v1/klarna-checkout#supported_locales
         private static readonly List<SupportedLocale> ValidLocales = new List<SupportedLocale>
             {
@@ -103,7 +101,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public int ConvertToCents(decimal value)
         {
-            return (int) Math.Round(value*100, 0, MidpointRounding.AwayFromZero);
+            return (int)Math.Round(value * 100, 0, MidpointRounding.AwayFromZero);
         }
 
         public Cart GetCart()
@@ -183,7 +181,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var language = _workContext.WorkingLanguage.LanguageCulture.ToLowerInvariant();
             var currency = _workContext.WorkingCurrency.CurrencyCode.ToUpperInvariant();
             var customer = _workContext.CurrentCustomer;
-            var enabledCountries = (_klarnaSettings.EnabledCountries ?? string.Empty).Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
+            var enabledCountries = (_klarnaSettings.EnabledCountries ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             string purchaseCountry;
 
             if (customer.ShippingAddress != null && customer.ShippingAddress.Country != null)
@@ -199,7 +197,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             var options = ValidLocales.Where(x => x.PurchaseCountry == purchaseCountry && (enabledCountries.Length == 0 || enabledCountries.Contains(x.PurchaseCountry)) && x.PurchaseCurrency == currency).ToList();
             var match = options.FirstOrDefault(x => x.Locale == language);
-            
+
             return match ?? options.FirstOrDefault();
         }
 
@@ -212,7 +210,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             Discount orderAppliedDiscount;
             int redeemedRewardPoints;
             decimal redeemedRewardPointsAmount;
-            
+
             _orderTotalCalculationService.GetShoppingCartTotal(cart,
                         out orderDiscountAmount, out orderAppliedDiscount, out appliedGiftCards,
                         out redeemedRewardPoints, out redeemedRewardPointsAmount);
@@ -290,7 +288,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         {
             var shippingOption = _workContext.CurrentCustomer.GetAttribute<ShippingOption>(SystemCustomerAttributeNames.SelectedShippingOption, _storeContext.CurrentStore.Id);
             var shippingId = shippingOption != null ? shippingOption.Name : string.Empty;
-            var shippingName = shippingOption != null ? shippingOption.Name :_localizationService.GetResource("order.shipping");
+            var shippingName = shippingOption != null ? shippingOption.Name : _localizationService.GetResource("order.shipping");
             var shippingPrice = 0;
             var intTaxRate = 0;
 

@@ -1,8 +1,6 @@
-﻿using System.Linq;
-using Motillo.Nop.Plugin.KlarnaCheckout.Controllers;
+﻿using Motillo.Nop.Plugin.KlarnaCheckout.Controllers;
 using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
-using Nop.Core;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Infrastructure;
 using Nop.Core.Plugins;
@@ -10,7 +8,6 @@ using Nop.Services.Localization;
 using Nop.Services.Payments;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Web.Routing;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout
@@ -18,14 +15,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
     public class KlarnaCheckoutProcessor : BasePlugin, IPaymentMethod
     {
         private readonly IKlarnaCheckoutHelper _klarnaCheckout;
-        private readonly IWorkContext _workContext;
 
         public KlarnaCheckoutProcessor(
-            IKlarnaCheckoutHelper klarnaCheckout,
-            IWorkContext workContext)
+            IKlarnaCheckoutHelper klarnaCheckout)
         {
             _klarnaCheckout = klarnaCheckout;
-            _workContext = workContext;
         }
 
         public ProcessPaymentResult ProcessPayment(ProcessPaymentRequest processPaymentRequest)

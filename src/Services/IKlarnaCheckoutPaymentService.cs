@@ -1,7 +1,7 @@
-﻿using System;
-using Klarna.Api;
+﻿using Klarna.Api;
 using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Nop.Core.Domain.Orders;
+using System;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
