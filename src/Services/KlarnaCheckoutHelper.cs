@@ -73,6 +73,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     PurchaseCountry = "DE",
                     PurchaseCurrency = "EUR",
                     Locale = "de-de"
+                },
+                new SupportedLocale
+                {
+                    Country = "Austria",
+                    Language = "German",
+                    PurchaseCountry = "AT",
+                    PurchaseCurrency = "EUR",
+                    Locale = "de-at"
                 }
             };
 
