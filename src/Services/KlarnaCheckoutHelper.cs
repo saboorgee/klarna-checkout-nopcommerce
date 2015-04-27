@@ -219,7 +219,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             foreach (var giftCard in appliedGiftCards)
             {
-                var price = ConvertToCents(giftCard.AmountCanBeUsed) * -1;
+                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(giftCard.AmountCanBeUsed, _workContext.WorkingCurrency);
+                var price = ConvertToCents(amountInCurrentCurrency) * -1;
 
                 result.Add(new CartItem
                 {
@@ -234,7 +235,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             if (orderDiscountAmount > 0)
             {
-                var discount = ConvertToCents(orderDiscountAmount) * -1;
+                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderDiscountAmount, _workContext.WorkingCurrency);
+                var discount = ConvertToCents(amountInCurrentCurrency) * -1;
                 var name = _localizationService.GetResource("order.totaldiscount");
 
                 if (orderAppliedDiscount.RequiresCouponCode)
@@ -261,7 +263,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             if (subDiscountAmount > 0)
             {
-                var discount = ConvertToCents(subDiscountAmount) * -1;
+                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(subDiscountAmount, _workContext.WorkingCurrency);
+                var discount = ConvertToCents(amountInCurrentCurrency) * -1;
                 var name = _localizationService.GetResource("order.totaldiscount");
 
                 if (subOrderAppliedDiscount.RequiresCouponCode)
@@ -297,7 +300,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             if (shippingTotal.HasValue)
             {
-                shippingPrice = ConvertToCents(shippingTotal.Value);
+                var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(shippingTotal.Value, _workContext.WorkingCurrency);
+
+                shippingPrice = ConvertToCents(priceInCurrentCurrency);
                 intTaxRate = ConvertToCents(taxRate);
             }
 
