@@ -143,6 +143,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.RenderingError", "Error showing Klarna Checkout");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.Unauthorized", "Unauthorized.");
+            this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.ThankYouError", "An error occured while creating the order.");
             
             base.Install();
         }
@@ -169,6 +170,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.RenderingError");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.Unauthorized");
+            this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.ThankYouError");
 
             base.Uninstall();
         }

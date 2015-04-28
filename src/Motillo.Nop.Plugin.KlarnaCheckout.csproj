@@ -161,7 +161,7 @@
     <Content Include="Views\KlarnaCheckout\PaymentInfoError.cshtml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Views\KlarnaCheckout\ThankYou.cshtml">
+    <Content Include="Views\KlarnaCheckout\ThankYouError.cshtml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

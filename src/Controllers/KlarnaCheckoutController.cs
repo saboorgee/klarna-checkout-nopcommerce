@@ -1,4 +1,5 @@
-﻿using Motillo.Nop.Plugin.KlarnaCheckout.Data;
+﻿using System.Collections.Concurrent;
+using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
 using Newtonsoft.Json;
@@ -26,6 +27,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly IWorkContext _workContext;
         private readonly ISettingService _settingService;
         private readonly KlarnaCheckoutSettings _settings;
+        private readonly OrderSettings _orderSettings;
         private readonly IRepository<KlarnaCheckoutEntity> _repository;
         private readonly IOrderService _orderService;
         private readonly IOrderProcessingService _orderProcessingService;
@@ -35,10 +37,16 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly IKlarnaCheckoutHelper _klarnaCheckoutHelper;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
 
+        // Used so that the push and thank you actions don't race. For the Google Analytics widget to work, the ThankYou action
+        // needs to redirect to checkout/completed.
+        // This dictionary can grow indefinately. The stored objects don't take up much space, but better solution is welcome.
+        private static readonly ConcurrentDictionary<string, object> Locker = new ConcurrentDictionary<string, object>();
+
         public KlarnaCheckoutController(
             IWorkContext workContext,
             ISettingService settingService,
             KlarnaCheckoutSettings settings,
+            OrderSettings orderSettings,
             IRepository<KlarnaCheckoutEntity> repository,
             IOrderService orderService,
             IOrderProcessingService orderProcessingService,
@@ -51,6 +59,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _workContext = workContext;
             _settingService = settingService;
             _settings = settings;
+            _orderSettings = orderSettings;
             _repository = repository;
             _orderService = orderService;
             _orderProcessingService = orderProcessingService;
@@ -200,25 +209,31 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _logger.Information(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Push URI request. sid: {0}, uri: {1}",
                 sid, klarna_order));
 
-            var klarnaRequest = _repository.Table
-                .OrderByDescending(x => x.CreatedOnUtc)
-                .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
-
-            if (klarnaRequest == null)
+            lock (Locker.GetOrAdd(klarna_order, new object()))
             {
-                _logger.Warning("KlarnaCheckout: Got push request for request not found. ResourceURI = " + klarna_order);
-                return;
-            }
+                var klarnaRequest = _repository.Table
+                    .OrderByDescending(x => x.CreatedOnUtc)
+                    .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
 
-            var customer = _customerService.GetCustomerById(klarnaRequest.CustomerId);
+                if (klarnaRequest == null)
+                {
+                    _logger.Warning("KlarnaCheckout: Got push request for request not found. ResourceURI = " + klarna_order);
+                    return;
+                }
 
-            try
-            {
-                SyncKlarnaAndNopOrder(klarnaRequest, customer);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error syncing klarna and nop order in Push. CustomerId: {0}, KlarnaId: {1}", customer.Id, klarnaRequest.Id), exception: ex);
+                var customer = _customerService.GetCustomerById(klarnaRequest.CustomerId);
+
+                try
+                {
+                    Order nopOrder;
+                    KlarnaOrder klarnaOrder;
+
+                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaOrder);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error syncing klarna and nop order in Push. CustomerId: {0}, KlarnaId: {1}", customer.Id, klarnaRequest.Id), exception: ex);
+                }
             }
         }
 
@@ -228,47 +243,56 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                     "KlarnaCheckout: Thank you request. Sid: {0}, klarna_order: {1}",
                     sid, klarna_order));
 
-            var klarnaRequest = _repository.Table
-                .OrderByDescending(x => x.CreatedOnUtc)
-                .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
-
-            if (klarnaRequest == null)
+            lock (Locker.GetOrAdd(klarna_order, new object()))
             {
-                _logger.Warning("KlarnaCheckout: Got thank you request for Klarna request not found. ResourceURI = " + klarna_order);
-                return RedirectToAction("Index", "Home");
+                var klarnaRequest = _repository.Table
+                    .OrderByDescending(x => x.CreatedOnUtc)
+                    .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
+
+                if (klarnaRequest == null)
+                {
+                    _logger.Warning("KlarnaCheckout: Got thank you request for Klarna request not found. ResourceURI = " + klarna_order);
+                    return RedirectToAction("Index", "Home");
+                }
+
+                var customer = _customerService.GetCustomerById(klarnaRequest.CustomerId);
+                KlarnaOrder klarnaOrder;
+                Order nopOrder;
+
+                try
+                {
+                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaOrder);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error syncing klarna and nop order in ThankYou. CustomerId: {0}, KlarnaId: {1}", customer.Id, klarnaRequest.Id), customer: customer, exception: ex);
+                    return View("~/Plugins/Motillo.KlarnaCheckout/Views/KlarnaCheckout/ThankYouError.cshtml");
+                }
+
+                if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete || klarnaOrder.Status == KlarnaOrder.StatusCreated)
+                {
+                    TempData["KlarnaSnippet"] = klarnaOrder.Gui.Snippet;
+                    ViewBag.KlarnaSnippet = klarnaOrder.Gui.Snippet;
+                }
+
+                if (_orderSettings.DisableOrderCompletedPage)
+                {
+                    return RedirectToAction("Index", "Home");
+                }
+
+                return RedirectToRoute("CheckoutCompleted", new { orderId = nopOrder.Id });
             }
-
-            var resourceUri = new Uri(klarnaRequest.KlarnaResourceUri);
-            var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
-            var data = order.Marshal();
-            var jsonData = JsonConvert.SerializeObject(data);
-            var klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
-
-            if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
-            {
-                TempData["KlarnaSnippet"] = klarnaOrder.Gui.Snippet;
-                ViewBag.KlarnaSnippet = klarnaOrder.Gui.Snippet;
-
-                return View("~/Plugins/Motillo.KlarnaCheckout/Views/KlarnaCheckout/ThankYou.cshtml");
-            }
-
-            return RedirectToAction("Index", "Home"); 
         }
 
-        private Order SyncKlarnaAndNopOrder(KlarnaCheckoutEntity klarnaRequest, Customer customer)
+        private void SyncKlarnaAndNopOrder(KlarnaCheckoutEntity klarnaRequest, Customer customer, out Order nopOrder, out KlarnaOrder klarnaOrder)
         {
-            var nopOrder = _orderService.GetOrderByGuid(klarnaRequest.OrderGuid);
+            nopOrder = _orderService.GetOrderByGuid(klarnaRequest.OrderGuid);
             var resourceUri = new Uri(klarnaRequest.KlarnaResourceUri);
             var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
             var data = order.Marshal();
             var jsonData = JsonConvert.SerializeObject(data);
-            var klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
-
-            if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
-            {
-                klarnaRequest.Status = KlarnaCheckoutStatus.Complete;
-                _repository.Update(klarnaRequest);
-            }
+            
+            klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
 
             // Create the order if it doesn't exist in nop. According to the Klarna Checkout
             // developer guidelines, one should only create the order if the status is
@@ -276,12 +300,16 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             // https://developers.klarna.com/en/klarna-checkout/acknowledge-an-order
             if (nopOrder == null && klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
             {
+                if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
+                {
+                    klarnaRequest.Status = KlarnaCheckoutStatus.Complete;
+                    _repository.Update(klarnaRequest);
+                }
+
                 _klarnaCheckoutPaymentService.SyncBillingAndShippingAddress(customer, klarnaOrder);
 
                 nopOrder = CreateOrderAndSyncWithKlarna(klarnaRequest, customer, klarnaOrder, resourceUri);
             }
-
-            return nopOrder;
         }
 
         private Order CreateOrderAndSyncWithKlarna(KlarnaCheckoutEntity klarnaRequest, Customer customer, KlarnaOrder klarnaOrder, Uri resourceUri)
