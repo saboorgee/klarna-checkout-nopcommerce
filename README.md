@@ -8,6 +8,7 @@ Klarna Checkout plugin for [nopCommerce](http://nopcommerce.codeplex.com/) 3.50.
 - Test/live mode.
 - Configuration of snippet colors.
 - Automatic activation of the Klarna order when the nop order is marked as shipped.
+- Works with the "Google Analytics or Universal Analytics" widget.
 
 ## Premium Support
  
@@ -17,14 +18,22 @@ Need help? Our Premium Support will get you up and running in no time. Contact u
 
 Installation can be done either from the precompiled package or directly from source. The easiest way is to use the package.
 
-**For the Klarna Checkout plugin to work correctly the store needs to have a publicly available address. Currently this applies even in test mode.**
+After installation, make sure to edit the `Checkout/Completed.cshtml` view so that the Klarna confirmation snippet is shown.
+
+```
+@if (TempData["KlarnaSnippet"] is string)
+{
+    <div class="row">
+        @Html.Raw((string)TempData["KlarnaSnippet"])
+    </div>
+}
+```
 
 ### From Package
 
 1. Download zip from the [release](https://github.com/Motillo/klarna-checkout-nopcommerce/releases) page.
 2. Unzip the content into the `Plugins` folder.
-3. (Optional) Modify views if needed.
-4. Install and configure the plugin through nopCommerce's administration interface.
+3. Install and configure the plugin through nopCommerce's administration interface.
 
 ### From Source
 
