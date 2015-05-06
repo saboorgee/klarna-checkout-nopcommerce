@@ -239,6 +239,23 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 });
             }
 
+            if (redeemedRewardPointsAmount > 0)
+            {
+                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(redeemedRewardPointsAmount, _workContext.WorkingCurrency);
+                var discount = ConvertToCents(amountInCurrentCurrency) * -1;
+                var name = string.Format(_localizationService.GetResource("order.rewardpoints"), redeemedRewardPoints);
+
+                result.Add(new CartItem
+                {
+                    Type = CartItem.TypeDiscount,
+                    Reference = "KC_REWARD_POINTS",
+                    Name = name,
+                    Quantity = 1,
+                    UnitPrice = discount,
+                    TaxRate = 0
+                });
+            }
+
             if (orderDiscountAmount > 0)
             {
                 var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderDiscountAmount, _workContext.WorkingCurrency);
