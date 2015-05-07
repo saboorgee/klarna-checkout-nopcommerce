@@ -29,6 +29,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private readonly ITaxService _taxService;
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly ICurrencyService _currencyService;
+        private readonly IGenericAttributeService _genericAttributeService;
+        private readonly ICheckoutAttributeParser _checkoutAttributeParser;
         private readonly KlarnaCheckoutSettings _klarnaSettings;
 
         // https://developers.klarna.com/en/api-references-v1/klarna-checkout#supported_locales
@@ -93,6 +95,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             ITaxService taxService,
             IPriceCalculationService priceCalculationService,
             ICurrencyService currencyService,
+            IGenericAttributeService genericAttributeService,
+            ICheckoutAttributeParser checkoutAttributeParser,
             KlarnaCheckoutSettings klarnaSettings
             )
         {
@@ -104,6 +108,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _taxService = taxService;
             _priceCalculationService = priceCalculationService;
             _currencyService = currencyService;
+            _genericAttributeService = genericAttributeService;
+            _checkoutAttributeParser = checkoutAttributeParser;
             _klarnaSettings = klarnaSettings;
         }
 
@@ -115,7 +121,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         public Cart GetCart()
         {
             var storeId = _storeContext.CurrentStore.Id;
-            var cartItems = _workContext.CurrentCustomer.ShoppingCartItems
+            var customer = _workContext.CurrentCustomer;
+            var cartItems = customer.ShoppingCartItems
                 .Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart)
                 .LimitPerStore(storeId)
                 .ToList();
@@ -125,11 +132,49 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             items.AddRange(GetCartItems(cartItems));
             items.Add(GetShippingItem(cartItems));
             items.AddRange(GetDiscountAndGiftCardItems(cartItems));
+            items.AddRange(GetCeckoutAttributeItems());
 
             return new Cart
             {
                 Items = items
             };
+        }
+
+        private IEnumerable<CartItem> GetCeckoutAttributeItems()
+        {
+            var result = new List<CartItem>();
+            var storeId = _storeContext.CurrentStore.Id;
+            var customer = _workContext.CurrentCustomer;
+
+            var checkoutAttributesXml = customer.GetAttribute<string>(SystemCustomerAttributeNames.CheckoutAttributes, _genericAttributeService, storeId);
+            var attributeValues = _checkoutAttributeParser.ParseCheckoutAttributeValues(checkoutAttributesXml);
+            
+            if (attributeValues != null)
+            {
+                foreach (var attributeValue in attributeValues)
+                {
+                    decimal taxRate;
+                    var caInclTax = _taxService.GetCheckoutAttributePrice(attributeValue, true, customer, out taxRate);
+                    var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(caInclTax, _workContext.WorkingCurrency);
+                    var price = ConvertToCents(amountInCurrentCurrency);
+                    var taxRateInCents = ConvertToCents(taxRate);
+                    var checkoutAttributePromptName = attributeValue.CheckoutAttribute.GetLocalized(x => x.TextPrompt);
+                    var attributeValueName = attributeValue.GetLocalized(x => x.Name);
+                    var name = string.Format("{0}: {1}", checkoutAttributePromptName, attributeValueName);
+
+                    result.Add(new CartItem
+                    {
+                        Type = CartItem.TypeDiscount,
+                        Reference = string.Format("KC_CA_{0}_{1}", checkoutAttributePromptName, attributeValueName),
+                        Name = name,
+                        Quantity = 1,
+                        UnitPrice = price,
+                        TaxRate = taxRateInCents
+                    });
+                }
+            }
+
+            return result;
         }
 
         public Merchant GetMerchant()
