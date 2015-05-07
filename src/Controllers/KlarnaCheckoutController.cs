@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using Motillo.Nop.Plugin.KlarnaCheckout.Data;
+﻿using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
 using Newtonsoft.Json;
@@ -8,11 +7,13 @@ using Nop.Core.Data;
 using Nop.Core.Domain.Orders;
 using Nop.Services.Configuration;
 using Nop.Services.Customers;
+using Nop.Services.Directory;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
 using Nop.Services.Payments;
 using Nop.Web.Framework.Controllers;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -34,6 +35,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly IStoreContext _storeContext;
         private readonly ILogger _logger;
         private readonly ICustomerService _customerService;
+        private readonly ICurrencyService _currencyService;
         private readonly IKlarnaCheckoutHelper _klarnaCheckoutHelper;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
 
@@ -53,6 +55,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             IStoreContext storeContext,
             ILogger logger,
             ICustomerService customerService,
+            ICurrencyService currencyService,
             IKlarnaCheckoutHelper klarnaCheckoutHelper,
             IKlarnaCheckoutPaymentService klarnaHelper)
         {
@@ -66,6 +69,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _storeContext = storeContext;
             _logger = logger;
             _customerService = customerService;
+            _currencyService = currencyService;
             _klarnaCheckoutHelper = klarnaCheckoutHelper;
             _klarnaCheckoutPaymentService = klarnaHelper;
         }
@@ -348,10 +352,24 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             nopOrder.AuthorizationTransactionId = klarnaOrder.Reservation;
             _orderService.UpdateOrder(nopOrder);
 
-            var orderTotalInCents = _klarnaCheckoutHelper.ConvertToCents(nopOrder.OrderTotal);
+            var orderTotalInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(nopOrder.OrderTotal, _workContext.WorkingCurrency);
+            
+            // We need to ensure the shopping cart wasn't tampered with before the user confirmed the Klarna order.
+            // If so an order may have been created which doesn't represent the paid items.
 
-            // Ensure the cart wasn't tampered with during checkout.
-            if (orderTotalInCents == klarnaOrder.Cart.TotalPriceIncludingTax)
+            // Due to rounding when using prices contains more than 2 decimals (e.g. currency conversion), we allow
+            // a slight diff in paid price and nop's reported price.
+            // For example nop rounds the prices after _all_ cart item prices have been summed but when sending
+            // items to Klarna, each price needs to be rounded separately (Klarna uses 2 decimals).
+            
+            // Assume a cart with two items.
+            // 1.114 + 2.114 = 3.228 which nop rounds to 3.23.
+            // 1.11 + 2.11 is sent to Klarna, which totals 3.22.
+
+            var allowedPriceDiff = orderTotalInCurrentCurrency*0.01m;
+            var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaOrder.Cart.TotalPriceIncludingTax.Value/100m));
+
+            if (diff < allowedPriceDiff)
             {
                 nopOrder.OrderNotes.Add(new OrderNote
                 {
@@ -391,13 +409,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                     }
                 }
             }
-            // Paid amount and order total differs. The cart might've been tampered with.
             else
             {
+                var orderTotalInCents = _klarnaCheckoutHelper.ConvertToCents(orderTotalInCurrentCurrency);
+
                 nopOrder.OrderNotes.Add(new OrderNote
                 {
-                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order total differs from Klarna order. OrderTotal: {0}, KlarnaTotal: {1}, Uri: {2}",
-                        orderTotalInCents, klarnaOrder.Cart.TotalPriceIncludingTax, resourceUri),
+                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order total differs from Klarna order. OrderTotal: {0}, OrderTotalInCents: {1}, KlarnaTotal: {2}, AllowedDiff: {3}, Diff: {4}, Uri: {5}",
+                        orderTotalInCurrentCurrency, orderTotalInCents, klarnaOrder.Cart.TotalPriceIncludingTax, allowedPriceDiff, diff, resourceUri),
                     DisplayToCustomer = false,
                     CreatedOnUtc = DateTime.UtcNow
                 });
