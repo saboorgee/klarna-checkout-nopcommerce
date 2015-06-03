@@ -9,6 +9,7 @@ using Nop.Services.Customers;
 using Nop.Services.Logging;
 using System;
 using System.Globalization;
+using System.Linq;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
@@ -203,25 +204,25 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var billingAddress = klarnaOrder.BillingAddress;
                 var shippingAddress = klarnaOrder.ShippingAddress;
 
-                customer.BillingAddress = customer.BillingAddress ?? new global::Nop.Core.Domain.Common.Address();
-                customer.BillingAddress.Email = billingAddress.Email;
-                customer.BillingAddress.Address1 = billingAddress.StreetAddress;
-                customer.BillingAddress.City = billingAddress.City;
-                customer.BillingAddress.Country = billingAddress.GetNopCountry();
-                customer.BillingAddress.FirstName = billingAddress.GivenName;
-                customer.BillingAddress.LastName = billingAddress.FamilyName;
-                customer.BillingAddress.ZipPostalCode = billingAddress.PostalCode;
-                customer.BillingAddress.FaxNumber = billingAddress.Phone;
+                var nopBillingAddress = customer.Addresses.FirstOrDefault(billingAddress.RepresentsAddress);
+                if (nopBillingAddress == null)
+                {
+                    nopBillingAddress = new global::Nop.Core.Domain.Common.Address { CreatedOnUtc = DateTime.UtcNow };
+                    customer.Addresses.Add(nopBillingAddress);
+                }
 
-                customer.ShippingAddress = customer.ShippingAddress ?? new global::Nop.Core.Domain.Common.Address();
-                customer.ShippingAddress.Email = shippingAddress.Email;
-                customer.ShippingAddress.Address1 = shippingAddress.StreetAddress;
-                customer.ShippingAddress.City = shippingAddress.City;
-                customer.ShippingAddress.Country = shippingAddress.GetNopCountry();
-                customer.ShippingAddress.FirstName = shippingAddress.GivenName;
-                customer.ShippingAddress.LastName = shippingAddress.FamilyName;
-                customer.ShippingAddress.ZipPostalCode = shippingAddress.PostalCode;
-                customer.ShippingAddress.FaxNumber = shippingAddress.Phone;
+                customer.BillingAddress = nopBillingAddress;
+                billingAddress.CopyTo(nopBillingAddress);
+
+                var nopShippingAddress = customer.Addresses.FirstOrDefault(shippingAddress.RepresentsAddress);
+                if (nopShippingAddress == null)
+                {
+                    nopShippingAddress = new global::Nop.Core.Domain.Common.Address { CreatedOnUtc = DateTime.UtcNow };
+                    customer.Addresses.Add(nopShippingAddress);
+                }
+
+                customer.ShippingAddress = nopShippingAddress;
+                shippingAddress.CopyTo(nopShippingAddress);
 
                 _customerService.UpdateCustomer(customer);
             }

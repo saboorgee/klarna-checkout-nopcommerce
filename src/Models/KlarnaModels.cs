@@ -1,9 +1,11 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using Newtonsoft.Json;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Infrastructure;
 using Nop.Services.Directory;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
@@ -67,7 +69,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         [JsonProperty("type", NullValueHandling = NullValueHandling.Ignore)]
         public string Type { get; set; }
 
-        [JsonProperty("gender", NullValueHandling =  NullValueHandling.Ignore)]
+        [JsonProperty("gender", NullValueHandling = NullValueHandling.Ignore)]
         public string Gender { get; set; }
 
         [JsonProperty("date_of_birth", NullValueHandling = NullValueHandling.Ignore)]
@@ -86,8 +88,17 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         [JsonProperty("care_of", NullValueHandling = NullValueHandling.Ignore)]
         public string CareOf { get; set; }
 
+        // Only in Sweden, Norway and Finland
         [JsonProperty("street_address", NullValueHandling = NullValueHandling.Ignore)]
         public string StreetAddress { get; set; }
+
+        // Only in Germany
+        [JsonProperty("street_name", NullValueHandling = NullValueHandling.Ignore)]
+        public string StreetName { get; set; }
+
+        // Only in Germany
+        [JsonProperty("street_number", NullValueHandling = NullValueHandling.Ignore)]
+        public string StreetNumber { get; set; }
 
         [JsonProperty("postal_code", NullValueHandling = NullValueHandling.Ignore)]
         public string PostalCode { get; set; }
@@ -110,6 +121,53 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
             var country = countryService.GetCountryByTwoLetterIsoCode(this.Country);
 
             return country;
+        }
+
+        public bool RepresentsAddress(global::Nop.Core.Domain.Common.Address address)
+        {
+            var country = GetNopCountry();
+
+            var result = address.CountryId == country.Id &&
+                   string.Compare(address.City.Trim(), City, StringComparison.OrdinalIgnoreCase) == 0 &&
+                   string.Compare(address.ZipPostalCode.Trim(), PostalCode, StringComparison.OrdinalIgnoreCase) == 0;
+
+            if (result)
+            {
+                var addr1 = (address.Address1 ?? string.Empty).Trim();
+
+                // In germany street name and number are separate fields so check if they are part of the address field.
+                if (string.Compare("DE", country.TwoLetterIsoCode, StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    result = CultureInfo.InvariantCulture.CompareInfo.IndexOf(addr1, StreetName, CompareOptions.IgnoreCase) != -1 &&
+                        CultureInfo.InvariantCulture.CompareInfo.IndexOf(addr1, StreetNumber, CompareOptions.IgnoreCase) != -1;
+                }
+                else
+                {
+                    result = string.Compare(addr1, StreetAddress, StringComparison.OrdinalIgnoreCase) == 0;
+                }
+            }
+
+            return result;
+        }
+
+        public void CopyTo(global::Nop.Core.Domain.Common.Address address)
+        {
+            address.Email = Email;
+            address.City = City;
+            address.Country = GetNopCountry();
+            address.FirstName = GivenName;
+            address.LastName = FamilyName;
+            address.ZipPostalCode = PostalCode;
+            address.FaxNumber = Phone;
+
+            if (string.Compare("DE", Country, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                address.Address1 = StreetName + " " + StreetNumber;
+            }
+            else
+            {
+                address.Address1 = StreetAddress;
+            }
         }
     }
 
@@ -176,7 +234,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
     {
         [JsonProperty("orderid1", NullValueHandling = NullValueHandling.Ignore)]
         public string OrderId1 { get; set; }
-        
+
         [JsonProperty("orderid2", NullValueHandling = NullValueHandling.Ignore)]
         public string OrderId2 { get; set; }
     }
