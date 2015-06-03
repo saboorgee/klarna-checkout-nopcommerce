@@ -98,6 +98,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 EnabledCountries = _settings.EnabledCountries,
                 CheckoutUrl = _settings.CheckoutUrl,
                 TermsUrl = _settings.TermsUrl,
+                DisableAutofocus = _settings.DisableAutofocus,
                 AllowSeparateShippingAddress = _settings.AllowSeparateShippingAddress,
                 TestMode = _settings.TestMode,
                 ColorButton = _settings.ColorButton,
@@ -126,6 +127,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _settings.EnabledCountries = (model.EnabledCountries ?? string.Empty).ToUpperInvariant();
             _settings.TermsUrl = model.TermsUrl;
             _settings.CheckoutUrl = model.CheckoutUrl;
+            _settings.DisableAutofocus = model.DisableAutofocus;
             _settings.AllowSeparateShippingAddress = model.AllowSeparateShippingAddress;
             _settings.TestMode = model.TestMode;
             _settings.ColorButton = model.ColorButton;

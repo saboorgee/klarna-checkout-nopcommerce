@@ -162,7 +162,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             try
             {
                 var cart = _klarnaCheckoutUtils.GetCart();
-                var gui = _klarnaCheckoutUtils.GetGui();
                 var options = _klarnaCheckoutUtils.GetOptions();
                 var connector = Connector.Create(_klarnaSettings.SharedSecret);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
@@ -170,7 +169,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var klarnaOrder = new KlarnaOrder
                 {
                     Cart = cart,
-                    Gui = gui,
                     Options = options,
                     Locale = supportedLocale.Locale,
                     PurchaseCountry = supportedLocale.PurchaseCountry,

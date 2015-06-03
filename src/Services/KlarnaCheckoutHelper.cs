@@ -385,14 +385,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public Gui GetGui()
         {
-            Gui result = null;
+            var result = new Gui();
 
             if (_klarnaSettings.DisableAutofocus)
             {
-                result = new Gui
-                {
-                    Options = new[] { Gui.OptionDisableAutofocus }
-                };
+                result.Options = new[] {Gui.OptionDisableAutofocus};
             }
 
             return result;
