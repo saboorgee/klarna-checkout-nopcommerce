@@ -26,6 +26,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         [NopResourceDisplayName("Motillo.Plugin.KlarnaCheckout.Settings.DisableAutofocus")]
         public bool DisableAutofocus { get; set; }
 
+        [NopResourceDisplayName("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress")]
+        public bool AllowSeparateShippingAddress { get; set; }
+
         [NopResourceDisplayName("Motillo.Plugin.KlarnaCheckout.Settings.TestMode")]
         public bool TestMode { get; set; }
 

@@ -69,6 +69,16 @@
         </tr>
         <tr>
             <td class="adminTitle">
+                @Html.NopLabelFor(x => x.AllowSeparateShippingAddress):
+            </td>
+            <td class="adminData">
+                @Html.EditorFor(x => x.AllowSeparateShippingAddress)
+                @Html.ValidationMessageFor(x => x.AllowSeparateShippingAddress)
+                <div>@T("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress.Hint")</div>
+            </td>
+        </tr>
+        <tr>
+            <td class="adminTitle">
                 @Html.NopLabelFor(x => x.TestMode):
             </td>
             <td class="adminData">

@@ -99,13 +99,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
             var gui = _klarnaCheckoutUtils.GetGui();
             var options = _klarnaCheckoutUtils.GetOptions();
-            //var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
 
             var klarnaOrder = new KlarnaOrder
             {
                 Cart = cart,
                 Merchant = merchant,
-                //ShippingAddress = shippingAddress,
                 Gui = gui,
                 Options = options,
                 Locale = supportedLocale.Locale,
@@ -168,7 +166,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var options = _klarnaCheckoutUtils.GetOptions();
                 var connector = Connector.Create(_klarnaSettings.SharedSecret);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
-                //var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
 
                 var klarnaOrder = new KlarnaOrder
                 {
@@ -179,6 +176,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     PurchaseCountry = supportedLocale.PurchaseCountry,
                     PurchaseCurrency = supportedLocale.PurchaseCurrency
                 };
+
                 var order = new Order(connector, resourceUri)
                 {
                     ContentType = ContentType

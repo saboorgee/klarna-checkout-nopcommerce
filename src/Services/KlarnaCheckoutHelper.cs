@@ -205,30 +205,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return cartItems;
         }
 
-        public Address GetShippingAddress()
-        {
-            var address = _workContext.CurrentCustomer.ShippingAddress;
-            if (address == null)
-            {
-                return null;
-            }
-
-            var country = address.Country != null ? address.Country.TwoLetterIsoCode : string.Empty;
-
-            return new Models.Address
-            {
-                GivenName = address.FirstName,
-                FamilyName = address.LastName,
-                CareOf = address.Company,
-                StreetAddress = address.Address1 ?? string.Empty,
-                PostalCode = address.ZipPostalCode,
-                City = address.City,
-                Country = country,
-                Email = address.Email,
-                Phone = address.PhoneNumber
-            };
-        }
-
         public SupportedLocale GetSupportedLocale()
         {
             var language = _workContext.WorkingLanguage.LanguageCulture.ToLowerInvariant();
@@ -425,6 +401,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         public Options GetOptions()
         {
             var result = new Options();
+
+            if (_klarnaSettings.AllowSeparateShippingAddress)
+            {
+                result.AllowSeparateShippingAddress = true;
+            }
 
             if (!string.IsNullOrEmpty(_klarnaSettings.ColorButton))
             {

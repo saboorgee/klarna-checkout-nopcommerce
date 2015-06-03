@@ -133,6 +133,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.TermsUrl", "Terms URL");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.CheckoutUrl", "Checkout URL");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.DisableAutofocus", "Disable autofocus");
+            this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress", "Allow separate shipping address");
+            this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress.Hint", "Make sure you're allowed to use this before activating!");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.TestMode", "Test mode");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.ColorButton", "Button color");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.ColorButtonText", "Button text color");
@@ -160,6 +162,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.TermsUrl");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.CheckoutUrl");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.DisableAutofocus");
+            this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress");
+            this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.AllowSeparateShippingAddress.Hint");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.TestMode");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.ColorButton");
             this.DeletePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.ColorButtonText");

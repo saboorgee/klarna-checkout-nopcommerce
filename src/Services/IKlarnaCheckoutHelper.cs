@@ -11,7 +11,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         Cart GetCart();
         Merchant GetMerchant();
         IEnumerable<CartItem> GetCartItems(IEnumerable<ShoppingCartItem> items);
-        Address GetShippingAddress();
         Motillo.Nop.Plugin.KlarnaCheckout.Services.KlarnaCheckoutHelper.SupportedLocale GetSupportedLocale();
 
         /// <summary>
