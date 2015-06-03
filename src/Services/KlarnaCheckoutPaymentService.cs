@@ -228,7 +228,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("KlarnaCheckout: Error syncing customers billing and shipping address", exception: ex, customer: customer);
+                var billing = JsonConvert.SerializeObject(klarnaOrder.BillingAddress);
+                var shipping = JsonConvert.SerializeObject(klarnaOrder.ShippingAddress);
+                throw new KlarnaCheckoutException(string.Format(CultureInfo.CurrentCulture, "Error syncing addresses. Billing: {0}, Shipping: {1}", billing, shipping), ex);
             }
         }
 
