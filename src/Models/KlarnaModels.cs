@@ -129,8 +129,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
             var country = GetNopCountry();
 
             var result = address.CountryId == country.Id &&
-                   string.Compare(address.City.Trim(), City, StringComparison.OrdinalIgnoreCase) == 0 &&
-                   string.Compare(address.ZipPostalCode.Trim(), PostalCode, StringComparison.OrdinalIgnoreCase) == 0;
+                   string.Compare((address.City ?? string.Empty).Trim(), City, StringComparison.OrdinalIgnoreCase) == 0 &&
+                   string.Compare((address.ZipPostalCode ?? string.Empty).Trim(), PostalCode, StringComparison.OrdinalIgnoreCase) == 0;
 
             if (result)
             {
