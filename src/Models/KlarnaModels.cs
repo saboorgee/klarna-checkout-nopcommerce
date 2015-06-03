@@ -1,12 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Globalization;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Infrastructure;
 using Nop.Services.Directory;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
 {
@@ -79,6 +78,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
     [DebuggerDisplay("{StreetAddress}, {PostalCode}, {Country}")]
     public class Address
     {
+        private const int GERMANY = 276;
+
         [JsonProperty("given_name", NullValueHandling = NullValueHandling.Ignore)]
         public string GivenName { get; set; }
 
@@ -136,7 +137,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
                 var addr1 = (address.Address1 ?? string.Empty).Trim();
 
                 // In germany street name and number are separate fields so check if they are part of the address field.
-                if (string.Compare("DE", country.TwoLetterIsoCode, StringComparison.OrdinalIgnoreCase) == 0)
+                if (country.NumericIsoCode == GERMANY)
                 {
                     result = CultureInfo.InvariantCulture.CompareInfo.IndexOf(addr1, StreetName, CompareOptions.IgnoreCase) != -1 &&
                         CultureInfo.InvariantCulture.CompareInfo.IndexOf(addr1, StreetNumber, CompareOptions.IgnoreCase) != -1;
@@ -152,15 +153,18 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
 
         public void CopyTo(global::Nop.Core.Domain.Common.Address address)
         {
+            var country = GetNopCountry();
+
             address.Email = Email;
             address.City = City;
-            address.Country = GetNopCountry();
+            address.Country = country;
+            address.CountryId = country.Id;
             address.FirstName = GivenName;
             address.LastName = FamilyName;
             address.ZipPostalCode = PostalCode;
             address.FaxNumber = Phone;
 
-            if (string.Compare("DE", Country, StringComparison.OrdinalIgnoreCase) == 0)
+            if (country.NumericIsoCode == GERMANY)
             {
                 address.Address1 = StreetName + " " + StreetNumber;
             }
