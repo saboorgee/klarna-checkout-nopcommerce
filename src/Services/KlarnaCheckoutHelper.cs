@@ -205,6 +205,28 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return cartItems;
         }
 
+        public Address GetShippingAddress()
+        {
+            var address = _workContext.CurrentCustomer.ShippingAddress;
+            if (address == null)
+            {
+                return null;
+            }
+
+            var result = new Address();
+
+            if (!string.IsNullOrEmpty(address.Email))
+            {
+                result.Email = address.Email;
+            }
+
+            if (!string.IsNullOrEmpty(address.ZipPostalCode))
+            {
+                result.PostalCode = address.ZipPostalCode;
+            }
+
+            return result;
+        }
         public SupportedLocale GetSupportedLocale()
         {
             var language = _workContext.WorkingLanguage.LanguageCulture.ToLowerInvariant();

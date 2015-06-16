@@ -100,6 +100,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
             var gui = _klarnaCheckoutUtils.GetGui();
             var options = _klarnaCheckoutUtils.GetOptions();
+            var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
 
             var klarnaOrder = new KlarnaOrder
             {
@@ -107,6 +108,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 Merchant = merchant,
                 Gui = gui,
                 Options = options,
+                ShippingAddress = shippingAddress,
                 Locale = supportedLocale.Locale,
                 PurchaseCountry = supportedLocale.PurchaseCountry,
                 PurchaseCurrency = supportedLocale.PurchaseCurrency
