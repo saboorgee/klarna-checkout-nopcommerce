@@ -168,11 +168,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var options = _klarnaCheckoutUtils.GetOptions();
                 var connector = Connector.Create(_klarnaSettings.SharedSecret);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
+                var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
 
                 var klarnaOrder = new KlarnaOrder
                 {
                     Cart = cart,
                     Options = options,
+                    ShippingAddress = shippingAddress,
                     Locale = supportedLocale.Locale,
                     PurchaseCountry = supportedLocale.PurchaseCountry,
                     PurchaseCurrency = supportedLocale.PurchaseCurrency
