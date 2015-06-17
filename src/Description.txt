@@ -1,7 +1,7 @@
 ﻿Group: Payment methods
 FriendlyName: Klarna Checkout
 SystemName: Motillo.KlarnaCheckout
-Version: 1.0.2-beta.4
+Version: 1.0.2-beta.5
 SupportedVersions: 3.50
 Author: Motillo AB
 DisplayOrder: 1
