@@ -3,20 +3,24 @@ using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
 using Newtonsoft.Json;
 using Nop.Core;
+using Nop.Core.Configuration;
 using Nop.Core.Data;
 using Nop.Core.Domain.Orders;
 using Nop.Services.Configuration;
 using Nop.Services.Customers;
 using Nop.Services.Directory;
+using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
 using Nop.Services.Payments;
+using Nop.Services.Stores;
 using Nop.Web.Framework.Controllers;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Web.Mvc;
 using Customer = Nop.Core.Domain.Customers.Customer;
 using Order = Nop.Core.Domain.Orders.Order;
@@ -27,7 +31,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
     {
         private readonly IWorkContext _workContext;
         private readonly ISettingService _settingService;
-        private readonly KlarnaCheckoutSettings _settings;
         private readonly OrderSettings _orderSettings;
         private readonly IRepository<KlarnaCheckoutEntity> _repository;
         private readonly IOrderService _orderService;
@@ -36,6 +39,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly ILogger _logger;
         private readonly ICustomerService _customerService;
         private readonly ICurrencyService _currencyService;
+        private readonly IStoreService _storeService;
+        private readonly ILocalizationService _localizationService;
         private readonly IKlarnaCheckoutHelper _klarnaCheckoutHelper;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
 
@@ -47,7 +52,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         public KlarnaCheckoutController(
             IWorkContext workContext,
             ISettingService settingService,
-            KlarnaCheckoutSettings settings,
             OrderSettings orderSettings,
             IRepository<KlarnaCheckoutEntity> repository,
             IOrderService orderService,
@@ -56,12 +60,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             ILogger logger,
             ICustomerService customerService,
             ICurrencyService currencyService,
+            IStoreService storeService,
+            ILocalizationService localizationService,
             IKlarnaCheckoutHelper klarnaCheckoutHelper,
             IKlarnaCheckoutPaymentService klarnaHelper)
         {
             _workContext = workContext;
             _settingService = settingService;
-            _settings = settings;
             _orderSettings = orderSettings;
             _repository = repository;
             _orderService = orderService;
@@ -70,6 +75,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _logger = logger;
             _customerService = customerService;
             _currencyService = currencyService;
+            _storeService = storeService;
+            _localizationService = localizationService;
             _klarnaCheckoutHelper = klarnaCheckoutHelper;
             _klarnaCheckoutPaymentService = klarnaHelper;
         }
@@ -91,23 +98,44 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         [ChildActionOnly]
         public ActionResult Configure()
         {
+            var storeScope = this.GetActiveStoreScopeConfiguration(_storeService, _workContext);
+            var klarnaCheckoutSettings = _settingService.LoadSetting<KlarnaCheckoutSettings>(storeScope);
             var model = new ConfigurationModel
             {
-                EId = _settings.EId,
-                SharedSecret = _settings.SharedSecret,
-                EnabledCountries = _settings.EnabledCountries,
-                CheckoutUrl = _settings.CheckoutUrl,
-                TermsUrl = _settings.TermsUrl,
-                DisableAutofocus = _settings.DisableAutofocus,
-                AllowSeparateShippingAddress = _settings.AllowSeparateShippingAddress,
-                TestMode = _settings.TestMode,
-                ColorButton = _settings.ColorButton,
-                ColorButtonText = _settings.ColorButtonText,
-                ColorCheckbox = _settings.ColorCheckbox,
-                ColorCheckboxCheckmark = _settings.ColorCheckboxCheckmark,
-                ColorHeader = _settings.ColorHeader,
-                ColorLink = _settings.ColorLink
+                ActiveStoreScopeConfiguration = storeScope,
+                EId = klarnaCheckoutSettings.EId,
+                SharedSecret = klarnaCheckoutSettings.SharedSecret,
+                EnabledCountries = klarnaCheckoutSettings.EnabledCountries,
+                CheckoutUrl = klarnaCheckoutSettings.CheckoutUrl,
+                TermsUrl = klarnaCheckoutSettings.TermsUrl,
+                DisableAutofocus = klarnaCheckoutSettings.DisableAutofocus,
+                AllowSeparateShippingAddress = klarnaCheckoutSettings.AllowSeparateShippingAddress,
+                TestMode = klarnaCheckoutSettings.TestMode,
+                ColorButton = klarnaCheckoutSettings.ColorButton,
+                ColorButtonText = klarnaCheckoutSettings.ColorButtonText,
+                ColorCheckbox = klarnaCheckoutSettings.ColorCheckbox,
+                ColorCheckboxCheckmark = klarnaCheckoutSettings.ColorCheckboxCheckmark,
+                ColorHeader = klarnaCheckoutSettings.ColorHeader,
+                ColorLink = klarnaCheckoutSettings.ColorLink
             };
+
+            if (storeScope > 0)
+            {
+                model.EId_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.EId, storeScope);
+                model.SharedSecret_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.SharedSecret, storeScope);
+                model.EnabledCountries_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.EnabledCountries, storeScope);
+                model.CheckoutUrl_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.CheckoutUrl, storeScope);
+                model.TermsUrl_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.TermsUrl, storeScope);
+                model.DisableAutofocus_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.DisableAutofocus, storeScope);
+                model.AllowSeparateShippingAddress_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.AllowSeparateShippingAddress, storeScope);
+                model.TestMode_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.TestMode, storeScope);
+                model.ColorButton_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorButton, storeScope);
+                model.ColorButtonText_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorButtonText, storeScope);
+                model.ColorCheckbox_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorCheckbox, storeScope);
+                model.ColorCheckboxCheckmark_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorCheckboxCheckmark, storeScope);
+                model.ColorHeader_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorHeader, storeScope);
+                model.ColorLink_OverrideForStore = _settingService.SettingExists(klarnaCheckoutSettings, x => x.ColorLink, storeScope);
+            }
 
             return View("~/Plugins/Motillo.KlarnaCheckout/Views/KlarnaCheckout/Configure.cshtml", model);
         }
@@ -122,25 +150,57 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 return View("~/Plugins/Motillo.KlarnaCheckout/Views/KlarnaCheckout/Configure.cshtml", model);
             }
 
-            _settings.EId = model.EId;
-            _settings.SharedSecret = model.SharedSecret;
-            _settings.EnabledCountries = (model.EnabledCountries ?? string.Empty).ToUpperInvariant();
-            _settings.TermsUrl = model.TermsUrl;
-            _settings.CheckoutUrl = model.CheckoutUrl;
-            _settings.DisableAutofocus = model.DisableAutofocus;
-            _settings.AllowSeparateShippingAddress = model.AllowSeparateShippingAddress;
-            _settings.TestMode = model.TestMode;
-            _settings.ColorButton = model.ColorButton;
-            _settings.ColorButtonText = model.ColorButtonText;
-            _settings.ColorCheckbox = model.ColorCheckbox;
-            _settings.ColorCheckboxCheckmark = model.ColorCheckboxCheckmark;
-            _settings.ColorHeader = model.ColorHeader;
-            _settings.ColorLink = model.ColorLink;
+            var storeScope = this.GetActiveStoreScopeConfiguration(_storeService, _workContext);
+            var klarnaSettings = _settingService.LoadSetting<KlarnaCheckoutSettings>(storeScope);
 
-            _settingService.SaveSetting(_settings);
+            klarnaSettings.EId = model.EId;
+            klarnaSettings.SharedSecret = model.SharedSecret;
+            klarnaSettings.EnabledCountries = (model.EnabledCountries ?? string.Empty).ToUpperInvariant();
+            klarnaSettings.TermsUrl = model.TermsUrl;
+            klarnaSettings.CheckoutUrl = model.CheckoutUrl;
+            klarnaSettings.DisableAutofocus = model.DisableAutofocus;
+            klarnaSettings.AllowSeparateShippingAddress = model.AllowSeparateShippingAddress;
+            klarnaSettings.TestMode = model.TestMode;
+            klarnaSettings.ColorButton = model.ColorButton;
+            klarnaSettings.ColorButtonText = model.ColorButtonText;
+            klarnaSettings.ColorCheckbox = model.ColorCheckbox;
+            klarnaSettings.ColorCheckboxCheckmark = model.ColorCheckboxCheckmark;
+            klarnaSettings.ColorHeader = model.ColorHeader;
+            klarnaSettings.ColorLink = model.ColorLink;
+
+            // Update settings based on eventual store overrides.
+            SaveSettingValue(klarnaSettings, storeScope, model.EId_OverrideForStore, x => x.EId);
+            SaveSettingValue(klarnaSettings, storeScope, model.SharedSecret_OverrideForStore, x => x.SharedSecret);
+            SaveSettingValue(klarnaSettings, storeScope, model.EnabledCountries_OverrideForStore, x => x.EnabledCountries);
+            SaveSettingValue(klarnaSettings, storeScope, model.TermsUrl_OverrideForStore, x => x.TermsUrl);
+            SaveSettingValue(klarnaSettings, storeScope, model.CheckoutUrl_OverrideForStore, x => x.CheckoutUrl);
+            SaveSettingValue(klarnaSettings, storeScope, model.DisableAutofocus_OverrideForStore, x => x.DisableAutofocus);
+            SaveSettingValue(klarnaSettings, storeScope, model.AllowSeparateShippingAddress_OverrideForStore, x => x.AllowSeparateShippingAddress);
+            SaveSettingValue(klarnaSettings, storeScope, model.TestMode_OverrideForStore, x => x.TestMode);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorButton_OverrideForStore, x => x.ColorButton);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorButtonText_OverrideForStore, x => x.ColorButtonText);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorCheckbox_OverrideForStore, x => x.ColorCheckbox);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorCheckboxCheckmark_OverrideForStore, x => x.ColorCheckboxCheckmark);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorHeader_OverrideForStore, x => x.ColorHeader);
+            SaveSettingValue(klarnaSettings, storeScope, model.ColorLink_OverrideForStore, x => x.ColorLink);
+
             _settingService.ClearCache();
 
+            SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
+
             return Configure();
+        }
+
+        private void SaveSettingValue<T, TPropType>(T settings, int storeScope, bool overrideEnabled, Expression<Func<T, TPropType>> keySelector) where T : ISettings, new()
+        {
+            if (overrideEnabled || storeScope == 0)
+            {
+                _settingService.SaveSetting(settings, keySelector, storeId: storeScope, clearCache: false);
+            }
+            else if (storeScope > 0)
+            {
+                _settingService.DeleteSetting(settings, keySelector, storeId: storeScope);
+            }
         }
 
         [ChildActionOnly]
