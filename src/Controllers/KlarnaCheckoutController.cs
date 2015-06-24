@@ -148,9 +148,10 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         {
             Uri resourceUri;
             var customer = _workContext.CurrentCustomer;
+            var storeId = _storeContext.CurrentStore.Id;
             var payment = _repository.Table
                 .OrderByDescending(x => x.CreatedOnUtc)
-                .FirstOrDefault(x => x.CustomerId == customer.Id && x.Status == KlarnaCheckoutStatus.Pending);
+                .FirstOrDefault(x => x.CustomerId == customer.Id && x.StoreId == storeId && x.Status == KlarnaCheckoutStatus.Pending);
 
             if (payment == null)
             {
