@@ -9,17 +9,25 @@ using Nop.Services.Payments;
 using System;
 using System.Collections.Generic;
 using System.Web.Routing;
+using Klarna.Api;
+using Nop.Services.Logging;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout
 {
     public class KlarnaCheckoutProcessor : BasePlugin, IPaymentMethod
     {
+        private readonly ILogger _logger;
         private readonly IKlarnaCheckoutHelper _klarnaCheckout;
+        private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
 
         public KlarnaCheckoutProcessor(
-            IKlarnaCheckoutHelper klarnaCheckout)
+            ILogger logger,
+            IKlarnaCheckoutHelper klarnaCheckout,
+            IKlarnaCheckoutPaymentService klarnaCheckoutPaymentService)
         {
+            _logger = logger;
             _klarnaCheckout = klarnaCheckout;
+            _klarnaCheckoutPaymentService = klarnaCheckoutPaymentService;
         }
 
         public ProcessPaymentResult ProcessPayment(ProcessPaymentRequest processPaymentRequest)
@@ -53,7 +61,33 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         public RefundPaymentResult Refund(RefundPaymentRequest refundPaymentRequest)
         {
             var result = new RefundPaymentResult();
-            result.AddError("Refund method not supported");
+
+            if (refundPaymentRequest.IsPartialRefund)
+            {
+                result.AddError("Partial refund is not supported.");
+                return result;
+            }
+
+            var order = refundPaymentRequest.Order;
+
+            if (string.IsNullOrWhiteSpace(order.CaptureTransactionId))
+            {
+                result.AddError("Cannot refund. CaptureTransactionId is missing from the order. Has the order been shipped?");
+                return result;
+            }
+
+            try
+            {
+                _klarnaCheckoutPaymentService.FullRefund(refundPaymentRequest.Order);
+            }
+            catch (KlarnaException ke)
+            {
+                _logger.Error("KlarnaCheckout: Error refunding reservation: " + order.AuthorizationTransactionId,
+                    exception: ke,
+                    customer: order.Customer);
+                result.AddError("An error occurred while refundinging the order. See the error log for more information.");
+            }
+
             return result;
         }
 
@@ -115,7 +149,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
         public bool SupportCapture { get { return false; } }
         public bool SupportPartiallyRefund { get { return false; } }
-        public bool SupportRefund { get { return false; } }
+        public bool SupportRefund { get { return true; } }
         public bool SupportVoid { get { return false; } }
         public RecurringPaymentType RecurringPaymentType { get { return RecurringPaymentType.NotSupported; } }
         public PaymentMethodType PaymentMethodType { get {return PaymentMethodType.Standard;} }

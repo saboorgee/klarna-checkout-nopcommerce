@@ -11,6 +11,9 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Nop.Core.Domain.Orders;
+using Nop.Services.Orders;
+using Order = Klarna.Checkout.Order;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
@@ -26,6 +29,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private readonly ICustomerService _customerService;
         private readonly ILogger _logger;
         private readonly KlarnaCheckoutSettings _klarnaSettings;
+        private readonly IOrderService _orderService;
 
         public KlarnaCheckoutPaymentService(
             IStoreContext storeContext,
@@ -35,7 +39,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             IKlarnaCheckoutHelper klarnaCheckoutUtils,
             ICustomerService customerService,
             ILogger logger,
-            KlarnaCheckoutSettings klarnaSettings)
+            KlarnaCheckoutSettings klarnaSettings,
+            IOrderService orderService)
         {
             _storeContext = storeContext;
             _workContext = workContext;
@@ -45,6 +50,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _customerService = customerService;
             _logger = logger;
             _klarnaSettings = klarnaSettings;
+            _orderService = orderService;
         }
 
         private string GetKlarnaOrderId(Uri resourceUri)
@@ -54,7 +60,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var match = _klarnaIdRegex.Match(resourceUri.ToString());
             if (!match.Success)
             {
-                throw new InvalidOperationException("Could not extract id from url: " + resourceUri);    
+                throw new InvalidOperationException("Could not extract id from url: " + resourceUri);
             }
 
             return match.Groups[1].Value;
@@ -292,6 +298,34 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
 
             return null;
+        }
+
+        public string FullRefund(global::Nop.Core.Domain.Orders.Order order)
+        {
+            var configuration = new Klarna.Api.Configuration(Country.Code.SE,
+            Language.Code.SV, Currency.Code.SEK, Encoding.Sweden)
+            {
+                Eid = _klarnaSettings.EId,
+                Secret = _klarnaSettings.SharedSecret,
+                IsLiveMode = !_klarnaSettings.TestMode
+            };
+
+            var api = new Api(configuration);
+            var result = api.CreditInvoice(order.CaptureTransactionId);
+
+            _logger.Information(string.Format(CultureInfo.InvariantCulture, "KlarnaCheckout: Order refunded. InvoiceNumber: {0}, AppliedTo: {1}",
+                result, result), customer: order.Customer);
+
+            order.OrderNotes.Add(new OrderNote
+            {
+                Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order has been refunded. Invoice Number: {0}; Refund applied to: {1}",
+                    order.CaptureTransactionId, result),
+                CreatedOnUtc = DateTime.UtcNow,
+                DisplayToCustomer = false
+            });
+            _orderService.UpdateOrder(order);
+
+            return result;
         }
     }
 }

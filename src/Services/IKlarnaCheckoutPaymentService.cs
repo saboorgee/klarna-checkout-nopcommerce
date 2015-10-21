@@ -14,5 +14,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaOrder klarnaOrder);
         bool CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
         ActivateReservationResponse Activate(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
+        string FullRefund(Order order);
     }
 }

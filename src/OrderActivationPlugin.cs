@@ -73,6 +73,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
                         CreatedOnUtc = DateTime.UtcNow,
                         DisplayToCustomer = false
                     });
+                    nopOrder.CaptureTransactionId = activationResult.InvoiceNumber;
                     _orderService.UpdateOrder(nopOrder);
 
                     klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
