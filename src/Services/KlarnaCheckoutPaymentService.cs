@@ -10,12 +10,13 @@ using Nop.Services.Logging;
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
     public class KlarnaCheckoutPaymentService : IKlarnaCheckoutPaymentService
     {
-        private const string ContentType = "application/vnd.klarna.checkout.aggregated-order-v2+json";
+        private readonly Regex _klarnaIdRegex = new Regex(@"/([^/]+)$");
 
         private readonly IStoreContext _storeContext;
         private readonly IWorkContext _workContext;
@@ -46,13 +47,24 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _klarnaSettings = klarnaSettings;
         }
 
-        private string BaseUri
+        private string GetKlarnaOrderId(Uri resourceUri)
+        {
+            if (resourceUri == null) throw new ArgumentNullException(nameof(resourceUri));
+
+            var match = _klarnaIdRegex.Match(resourceUri.ToString());
+            if (!match.Success)
+            {
+                throw new InvalidOperationException("Could not extract id from url: " + resourceUri);    
+            }
+
+            return match.Groups[1].Value;
+        }
+
+        private Uri BaseUri
         {
             get
             {
-                return _klarnaSettings.TestMode
-                    ? "https://checkout.testdrive.klarna.com/checkout/orders"
-                    : "https://checkout.klarna.com/checkout/orders";
+                return _klarnaSettings.TestMode ? Connector.TestBaseUri : Connector.BaseUri;
             }
         }
 
@@ -60,11 +72,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         {
             try
             {
-                var connector = Connector.Create(_klarnaSettings.SharedSecret);
-                var klarnaOrder = new Klarna.Checkout.Order(connector, resourceUri)
-                {
-                    ContentType = ContentType
-                };
+                var klarnaOrderId = GetKlarnaOrderId(resourceUri);
+                var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
+                var klarnaOrder = new Klarna.Checkout.Order(connector, klarnaOrderId);
 
                 klarnaOrder.Fetch();
                 var fetchedData = klarnaOrder.Marshal();
@@ -115,12 +125,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             };
 
             var dictData = klarnaOrder.ToDictionary();
-            var connector = Connector.Create(_klarnaSettings.SharedSecret);
-            var order = new Klarna.Checkout.Order(connector)
-            {
-                BaseUri = new Uri(BaseUri),
-                ContentType = ContentType
-            };
+            var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
+            var order = new Klarna.Checkout.Order(connector);
 
             order.Create(dictData);
 
@@ -149,11 +155,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public Order Fetch(Uri resourceUri)
         {
-            var connector = Connector.Create(_klarnaSettings.SharedSecret);
-            var order = new Klarna.Checkout.Order(connector, resourceUri)
-            {
-                ContentType = ContentType
-            };
+            var klarnaOrderId = GetKlarnaOrderId(resourceUri);
+            var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
+            var order = new Klarna.Checkout.Order(connector, klarnaOrderId);
 
             order.Fetch();
 
@@ -164,9 +168,10 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         {
             try
             {
+                var klarnaOrderId = GetKlarnaOrderId(resourceUri);
                 var cart = _klarnaCheckoutUtils.GetCart();
                 var options = _klarnaCheckoutUtils.GetOptions();
-                var connector = Connector.Create(_klarnaSettings.SharedSecret);
+                var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
 
                 var klarnaOrder = new KlarnaOrder
@@ -178,10 +183,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     PurchaseCurrency = supportedLocale.PurchaseCurrency
                 };
 
-                var order = new Order(connector, resourceUri)
-                {
-                    ContentType = ContentType
-                };
+                var order = new Order(connector, klarnaOrderId);
                 var dictData = klarnaOrder.ToDictionary();
 
                 order.Update(dictData);
