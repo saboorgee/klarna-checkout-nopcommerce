@@ -273,33 +273,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return false;
         }
 
-        public ActivateReservationResponse Activate(string reservation, global::Nop.Core.Domain.Customers.Customer customer)
-        {
-            try
-            {
-                var configuration = new Configuration(Country.Code.SE, Language.Code.SV, Currency.Code.SEK, Encoding.Sweden)
-                {
-                    Eid = _klarnaSettings.EId,
-                    Secret = _klarnaSettings.SharedSecret,
-                    IsLiveMode = !_klarnaSettings.TestMode
-                };
-
-                var api = new Api(configuration);
-                var result = api.Activate(reservation);
-
-                _logger.Debug(string.Format(CultureInfo.InvariantCulture, "KlarnaCheckout: Reservation Activated: RiskStatus: {0}, InvoiceNumber: {1}",
-                    result.RiskStatus, result.InvoiceNumber), customer: customer);
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("KlarnaCheckout: Error activating reservation: " + reservation, exception: ex, customer: customer);
-            }
-
-            return null;
-        }
-
         public string FullRefund(global::Nop.Core.Domain.Orders.Order order)
         {
             var configuration = new Klarna.Api.Configuration(Country.Code.SE,
@@ -326,6 +299,57 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _orderService.UpdateOrder(order);
 
             return result;
+        }
+
+        public bool Capture(global::Nop.Core.Domain.Orders.Order order)
+        {
+            var reservation = order.AuthorizationTransactionId;
+
+            try
+            {
+                var configuration = new Configuration(Country.Code.SE, Language.Code.SV, Currency.Code.SEK, Encoding.Sweden)
+                {
+                    Eid = _klarnaSettings.EId,
+                    Secret = _klarnaSettings.SharedSecret,
+                    IsLiveMode = !_klarnaSettings.TestMode
+                };
+
+                var api = new Api(configuration);
+                var activationResult = api.Activate(reservation);
+
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna order has been captured. Reservation: {0}, RiskStatus: {1}, InvoiceNumber: {2}",
+                    reservation, activationResult.RiskStatus, activationResult.InvoiceNumber),
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                order.CaptureTransactionId = activationResult.InvoiceNumber;
+                _orderService.UpdateOrder(order);
+
+                var klarnaRequest = _klarnaRepository.Table.FirstOrDefault(x => x.OrderGuid == order.OrderGuid);
+                if (klarnaRequest != null)
+                {
+                    klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
+                    _klarnaRepository.Update(klarnaRequest);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = "KlarnaCheckout: An error occurred when the payment was being captured. See the error log for more information.",
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+
+                _logger.Error("KlarnaCheckout: Error activating reservation: " + reservation, exception: ex, customer: order.Customer);
+            }
+
+            return false;
         }
     }
 }

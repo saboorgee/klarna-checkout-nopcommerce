@@ -8,26 +8,33 @@ using Nop.Services.Localization;
 using Nop.Services.Payments;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Web.Routing;
 using Klarna.Api;
 using Nop.Services.Logging;
+using Nop.Services.Orders;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout
 {
     public class KlarnaCheckoutProcessor : BasePlugin, IPaymentMethod
     {
+        public const string PaymentMethodSystemName = "Motillo.KlarnaCheckout";
+
         private readonly ILogger _logger;
         private readonly IKlarnaCheckoutHelper _klarnaCheckout;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
+        private readonly IOrderService _orderService;
 
         public KlarnaCheckoutProcessor(
             ILogger logger,
             IKlarnaCheckoutHelper klarnaCheckout,
-            IKlarnaCheckoutPaymentService klarnaCheckoutPaymentService)
+            IKlarnaCheckoutPaymentService klarnaCheckoutPaymentService,
+            IOrderService orderService)
         {
             _logger = logger;
             _klarnaCheckout = klarnaCheckout;
             _klarnaCheckoutPaymentService = klarnaCheckoutPaymentService;
+            _orderService = orderService;
         }
 
         public ProcessPaymentResult ProcessPayment(ProcessPaymentRequest processPaymentRequest)
@@ -53,8 +60,15 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
         public CapturePaymentResult Capture(CapturePaymentRequest capturePaymentRequest)
         {
+            var order = capturePaymentRequest.Order;
+            var captured = _klarnaCheckoutPaymentService.Capture(order);
             var result = new CapturePaymentResult();
-            result.AddError("Capture method not supported");
+
+            if (!captured)
+            {
+                result.AddError("The order could not be captured.");
+            }
+
             return result;
         }
 
@@ -147,7 +161,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             return typeof(KlarnaCheckoutController);
         }
 
-        public bool SupportCapture { get { return false; } }
+        public bool SupportCapture { get { return true; } }
         public bool SupportPartiallyRefund { get { return false; } }
         public bool SupportRefund { get { return true; } }
         public bool SupportVoid { get { return false; } }

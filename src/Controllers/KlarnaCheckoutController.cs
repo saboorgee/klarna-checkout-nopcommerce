@@ -360,7 +360,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
             var data = order.Marshal();
             var jsonData = JsonConvert.SerializeObject(data);
-            
+
             klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
 
             // Create the order if it doesn't exist in nop. According to the Klarna Checkout
@@ -388,7 +388,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 OrderGuid = klarnaRequest.OrderGuid,
                 CustomerId = customer.Id,
                 StoreId = _storeContext.CurrentStore.Id,
-                PaymentMethodSystemName = "Motillo.KlarnaCheckout"
+                PaymentMethodSystemName = KlarnaCheckoutProcessor.PaymentMethodSystemName
             };
 
             var placeOrderResult = _orderProcessingService.PlaceOrder(processPaymentRequest);
@@ -418,7 +418,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _orderService.UpdateOrder(nopOrder);
 
             var orderTotalInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(nopOrder.OrderTotal, _workContext.WorkingCurrency);
-            
+
             // We need to ensure the shopping cart wasn't tampered with before the user confirmed the Klarna order.
             // If so an order may have been created which doesn't represent the paid items.
 
@@ -426,13 +426,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             // a slight diff in paid price and nop's reported price.
             // For example nop rounds the prices after _all_ cart item prices have been summed but when sending
             // items to Klarna, each price needs to be rounded separately (Klarna uses 2 decimals).
-            
+
             // Assume a cart with two items.
             // 1.114 + 2.114 = 3.228 which nop rounds to 3.23.
             // 1.11 + 2.11 is sent to Klarna, which totals 3.22.
 
-            var allowedPriceDiff = orderTotalInCurrentCurrency*0.01m;
-            var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaOrder.Cart.TotalPriceIncludingTax.Value/100m));
+            var allowedPriceDiff = orderTotalInCurrentCurrency * 0.01m;
+            var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaOrder.Cart.TotalPriceIncludingTax.Value / 100m));
 
             if (diff < allowedPriceDiff)
             {
@@ -452,25 +452,15 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                     // In those cases, make sure the Klarna order is activated.
                     if (nopOrder.OrderStatus == OrderStatus.Complete)
                     {
-                        var activationResult = _klarnaCheckoutPaymentService.Activate(klarnaOrder.Reservation, customer);
-
-                        if (activationResult != null)
+                        nopOrder.OrderNotes.Add(new OrderNote
                         {
-                            nopOrder.OrderNotes.Add(new OrderNote
-                            {
-                                Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order complete after payment, activating Klarna order. Reservation: {0}, RiskStatus: {1}, InvoiceNumber: {2}",
-                                    klarnaOrder.Reservation, activationResult.RiskStatus, activationResult.InvoiceNumber),
-                                CreatedOnUtc = DateTime.UtcNow,
-                                DisplayToCustomer = false
-                            });
-                            _orderService.UpdateOrder(nopOrder);
+                            Note = "KlarnaCheckout: Order complete after payment, will try to capture payment.",
+                            CreatedOnUtc = DateTime.UtcNow,
+                            DisplayToCustomer = false
+                        });
+                        _orderService.UpdateOrder(nopOrder);
 
-                            klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
-                            _repository.Update(klarnaRequest);
-
-                            _logger.Information(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order complete after payment, activating Klarna order. OrderId: {0}, OrderGuid: {1}",
-                                nopOrder.Id, nopOrder.OrderGuid));
-                        }
+                        _klarnaCheckoutPaymentService.Capture(nopOrder);
                     }
                 }
             }

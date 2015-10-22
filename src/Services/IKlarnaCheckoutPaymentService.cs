@@ -13,7 +13,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         bool Update(Uri resourceUri);
         void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaOrder klarnaOrder);
         bool CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
-        ActivateReservationResponse Activate(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
         string FullRefund(Order order);
+
+        /// <summary>
+        /// Captures (activates) the klarna payment based on the order's AuthorizationTransactionId (reservation number).
+        /// </summary>
+        bool Capture(Order order);
     }
 }

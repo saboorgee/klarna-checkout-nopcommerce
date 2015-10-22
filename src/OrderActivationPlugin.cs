@@ -11,81 +11,70 @@ using Nop.Services.Orders;
 using System;
 using System.Globalization;
 using System.Linq;
+using Nop.Services.Payments;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout
 {
     public class OrderActivationPlugin : BasePlugin, IConsumer<ShipmentSentEvent>
     {
-        private readonly IRepository<KlarnaCheckoutEntity> _repository;
-        private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
         private readonly IOrderService _orderService;
         private readonly ILogger _logger;
+        private readonly IPaymentService _paymentService;
 
         public OrderActivationPlugin(
-            IRepository<KlarnaCheckoutEntity> repository,
-            IKlarnaCheckoutPaymentService klarnaCheckoutPaymentService,
             IOrderService orderService,
-            ILogger logger)
+            ILogger logger,
+            IPaymentService paymentService)
         {
-            _repository = repository;
-            _klarnaCheckoutPaymentService = klarnaCheckoutPaymentService;
             _orderService = orderService;
             _logger = logger;
+            _paymentService = paymentService;
         }
 
         public void HandleEvent(ShipmentSentEvent eventMessage)
         {
             var nopOrder = eventMessage.Shipment.Order;
-            var klarnaRequest = _repository.Table.FirstOrDefault(x => x.OrderGuid == nopOrder.OrderGuid);
 
-            // Ignore, might've been paid with paypal for example.
-            // We could check the PaymentSystemMethodName, but these should be in sync.
-            // Further down the klarnaRequest status needs to be updated.
-            if (klarnaRequest == null)
+            // Ignore other payment methods.
+            if (nopOrder.PaymentMethodSystemName != KlarnaCheckoutProcessor.PaymentMethodSystemName)
             {
                 return;
             }
-            
+
             try
             {
-                var reservation = nopOrder.AuthorizationTransactionId;
-
-                // The Klarna reservation wasn't initially stored in AuthorizationTransactionId. Fall back to fetching it.
-                if (string.IsNullOrEmpty(reservation))
-                {
-                    var resourceUri = new Uri(klarnaRequest.KlarnaResourceUri);
-                    var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
-                    var data = order.Marshal();
-                    var jsonData = JsonConvert.SerializeObject(data);
-                    var klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
-
-                    reservation = klarnaOrder.Reservation;
-                }
-
-                var activationResult = _klarnaCheckoutPaymentService.Activate(reservation, nopOrder.Customer);
-
-                if (activationResult != null)
+                // Check if the order has been captured manually.
+                if (!string.IsNullOrEmpty(nopOrder.CaptureTransactionId))
                 {
                     nopOrder.OrderNotes.Add(new OrderNote
                     {
-                        Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna order activated because the order has been shipped. Reservation: {0}, RiskStatus: {1}, InvoiceNumber: {2}",
-                        reservation, activationResult.RiskStatus, activationResult.InvoiceNumber),
+                        Note = "KlarnaCheckout: Order shipped but the payment has already been captured.",
                         CreatedOnUtc = DateTime.UtcNow,
                         DisplayToCustomer = false
                     });
-                    nopOrder.CaptureTransactionId = activationResult.InvoiceNumber;
                     _orderService.UpdateOrder(nopOrder);
-
-                    klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
-                    _repository.Update(klarnaRequest);
-
-                    _logger.Information(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna order activated because the order has been shipped. OrderId: {0}, OrderGuid: {1}",
-                        nopOrder.Id, nopOrder.OrderGuid));
+                    return;
                 }
+
+                nopOrder.OrderNotes.Add(new OrderNote
+                {
+                    Note = "KlarnaCheckout: Order has been shipped, trying to capture payment from Klarna.",
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(nopOrder);
+
+                var klarnaPaymentService =
+                    _paymentService.LoadPaymentMethodBySystemName(KlarnaCheckoutProcessor.PaymentMethodSystemName);
+                var captureRequest = new CapturePaymentRequest
+                {
+                    Order = nopOrder
+                };
+                klarnaPaymentService.Capture(captureRequest);
             }
             catch (Exception ex)
             {
-                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error activating order. OrderId: {0}, OrderGuid: {1}",
+                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error capturing order when shipped. OrderId: {0}, OrderGuid: {1}",
                     nopOrder.Id, nopOrder.OrderGuid), exception: ex, customer: nopOrder.Customer);
             }
         }
