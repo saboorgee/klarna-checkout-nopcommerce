@@ -13,7 +13,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         Klarna.Checkout.Order Fetch(Uri resourceUri);
         bool Update(Uri resourceUri);
         void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaOrder klarnaOrder);
-        bool CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
+        void CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
         void FullRefund(Order order);
     }
 }

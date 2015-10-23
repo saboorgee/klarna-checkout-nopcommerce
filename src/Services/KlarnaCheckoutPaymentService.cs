@@ -230,7 +230,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
         }
 
-        public bool CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer)
+        public void CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer)
         {
             try
             {
@@ -242,21 +242,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 };
 
                 var api = new Api(configuration);
-                var cancelled = api.CancelReservation(reservation);
+                api.CancelReservation(reservation);
 
-                if (cancelled)
-                {
-                    _logger.Warning("KlarnaCheckout: Reservation cancelled: " + reservation, customer: customer);
-                }
-
-                return cancelled;
+                _logger.Information("KlarnaCheckout: Reservation cancelled: " + reservation, customer: customer);
             }
             catch (Exception ex)
             {
                 _logger.Error("KlarnaCheckout: Error cancelling reservation: " + reservation, exception: ex, customer: customer);
             }
-
-            return false;
         }
 
         public void FullRefund(global::Nop.Core.Domain.Orders.Order order)

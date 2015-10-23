@@ -155,8 +155,42 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
         public VoidPaymentResult Void(VoidPaymentRequest voidPaymentRequest)
         {
+            var order = voidPaymentRequest.Order;
             var result = new VoidPaymentResult();
-            result.AddError("Void method not supported");
+
+            try
+            {
+                _klarnaCheckoutPaymentService.CancelPayment(order.AuthorizationTransactionId, order.Customer);
+
+                result.NewPaymentStatus = PaymentStatus.Voided;
+
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: The payment has been voided. Reservation: {0}",
+                        order.AuthorizationTransactionId),
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+            }
+            catch (KlarnaCheckoutException kce)
+            {
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = "KlarnaCheckout: An error occurred when voiding the payment. See the error log for more information.",
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+
+                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error voiding payment. Order Id: {0}; Reservation: {1}",
+                    order.Id, order.AuthorizationTransactionId),
+                    exception: kce,
+                    customer: order.Customer);
+
+                result.AddError("An error occurred while voiding the order. See the error log for more information.");
+            }
+
             return result;
         }
 
@@ -212,7 +246,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         public bool SupportCapture { get { return true; } }
         public bool SupportPartiallyRefund { get { return false; } }
         public bool SupportRefund { get { return true; } }
-        public bool SupportVoid { get { return false; } }
+        public bool SupportVoid { get { return true; } }
         public RecurringPaymentType RecurringPaymentType { get { return RecurringPaymentType.NotSupported; } }
         public PaymentMethodType PaymentMethodType { get { return PaymentMethodType.Standard; } }
         public bool SkipPaymentInfo { get { return false; } }

@@ -404,10 +404,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna has been processed but order could not be created in Nop! Klarna ID={0}, ResourceURI={1}. Errors: {2}",
                     klarnaOrder.Id, klarnaRequest.KlarnaResourceUri, errors), customer: customer);
 
-                if (!_klarnaCheckoutPaymentService.CancelPayment(klarnaOrder.Reservation, customer))
-                {
-                    _logger.Error("KlarnaCheckout: Error canceling reservation: " + klarnaOrder.Reservation, customer: customer);
-                }
+                _klarnaCheckoutPaymentService.CancelPayment(klarnaOrder.Reservation, customer);
 
                 throw new KlarnaCheckoutException("Error creating order: " + errors);
             }
