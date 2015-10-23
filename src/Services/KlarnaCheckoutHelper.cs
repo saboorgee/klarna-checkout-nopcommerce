@@ -16,11 +16,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
     public class KlarnaCheckoutHelper : IKlarnaCheckoutHelper
     {
+        private static readonly Regex KlarnaIdRegex = new Regex(@"/([^/]+)$");
         private readonly IWorkContext _workContext;
         private readonly IStoreContext _storeContext;
         private readonly IOrderTotalCalculationService _orderTotalCalculationService;
@@ -111,6 +113,19 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _genericAttributeService = genericAttributeService;
             _checkoutAttributeParser = checkoutAttributeParser;
             _klarnaSettings = klarnaSettings;
+        }
+
+        public string GetOrderIdFromUri(Uri klarnaOrderUri)
+        {
+            if (klarnaOrderUri == null) throw new ArgumentNullException(nameof(klarnaOrderUri));
+
+            var match = KlarnaIdRegex.Match(klarnaOrderUri.ToString());
+            if (!match.Success)
+            {
+                throw new InvalidOperationException("Could not extract id from url: " + klarnaOrderUri);
+            }
+
+            return match.Groups[1].Value;
         }
 
         public int ConvertToCents(decimal value)

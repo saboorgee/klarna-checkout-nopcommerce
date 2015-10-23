@@ -19,8 +19,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
     public class KlarnaCheckoutPaymentService : IKlarnaCheckoutPaymentService
     {
-        private readonly Regex _klarnaIdRegex = new Regex(@"/([^/]+)$");
-
         private readonly IStoreContext _storeContext;
         private readonly IWorkContext _workContext;
         private readonly IWebHelper _webHelper;
@@ -53,19 +51,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _orderService = orderService;
         }
 
-        private string GetKlarnaOrderId(Uri resourceUri)
-        {
-            if (resourceUri == null) throw new ArgumentNullException(nameof(resourceUri));
-
-            var match = _klarnaIdRegex.Match(resourceUri.ToString());
-            if (!match.Success)
-            {
-                throw new InvalidOperationException("Could not extract id from url: " + resourceUri);
-            }
-
-            return match.Groups[1].Value;
-        }
-
         private Uri BaseUri
         {
             get
@@ -74,15 +59,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
         }
 
-        public void Acknowledge(Uri resourceUri, global::Nop.Core.Domain.Orders.Order order)
+        public void Acknowledge(global::Nop.Core.Domain.Orders.Order order)
         {
             try
             {
-                var klarnaOrderId = GetKlarnaOrderId(resourceUri);
-                var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
-                var klarnaOrder = new Klarna.Checkout.Order(connector, klarnaOrderId);
-
-                klarnaOrder.Fetch();
+                var entity = _klarnaRepository.Table.First(x => x.OrderGuid == order.OrderGuid);
+                var resourceUri = new Uri(entity.KlarnaResourceUri);
+                var klarnaOrder = Fetch(resourceUri);
                 var fetchedData = klarnaOrder.Marshal();
                 var typedData = KlarnaOrder.FromDictionary(fetchedData);
 
@@ -101,11 +84,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     var dictData = updateData.ToDictionary();
 
                     klarnaOrder.Update(dictData);
+
+                    order.AuthorizationTransactionId = typedData.Reservation;
+                    _orderService.UpdateOrder(order);
                 }
             }
             catch (Exception ex)
             {
-                throw new NopException("Error Acknowledging Klarna Order", ex);
+                throw new KlarnaCheckoutException("Error acknowledging Klarna order. Order Id: " + order.Id, ex);
             }
         }
 
@@ -161,7 +147,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public Order Fetch(Uri resourceUri)
         {
-            var klarnaOrderId = GetKlarnaOrderId(resourceUri);
+            var klarnaOrderId = _klarnaCheckoutUtils.GetOrderIdFromUri(resourceUri);
             var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
             var order = new Klarna.Checkout.Order(connector, klarnaOrderId);
 
@@ -174,7 +160,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         {
             try
             {
-                var klarnaOrderId = GetKlarnaOrderId(resourceUri);
+                var klarnaOrderId = _klarnaCheckoutUtils.GetOrderIdFromUri(resourceUri);
                 var cart = _klarnaCheckoutUtils.GetCart();
                 var options = _klarnaCheckoutUtils.GetOptions();
                 var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
@@ -273,37 +259,47 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return false;
         }
 
-        public string FullRefund(global::Nop.Core.Domain.Orders.Order order)
+        public void FullRefund(global::Nop.Core.Domain.Orders.Order order)
         {
-            var configuration = new Klarna.Api.Configuration(Country.Code.SE,
-            Language.Code.SV, Currency.Code.SEK, Encoding.Sweden)
+            try
             {
-                Eid = _klarnaSettings.EId,
-                Secret = _klarnaSettings.SharedSecret,
-                IsLiveMode = !_klarnaSettings.TestMode
-            };
+                var configuration = new Klarna.Api.Configuration(Country.Code.SE,
+                Language.Code.SV, Currency.Code.SEK, Encoding.Sweden)
+                {
+                    Eid = _klarnaSettings.EId,
+                    Secret = _klarnaSettings.SharedSecret,
+                    IsLiveMode = !_klarnaSettings.TestMode
+                };
 
-            var api = new Api(configuration);
-            var result = api.CreditInvoice(order.CaptureTransactionId);
+                var api = new Api(configuration);
+                var result = api.CreditInvoice(order.CaptureTransactionId);
 
-            _logger.Information(string.Format(CultureInfo.InvariantCulture, "KlarnaCheckout: Order refunded. InvoiceNumber: {0}, AppliedTo: {1}",
-                result, result), customer: order.Customer);
+                _logger.Information(string.Format(CultureInfo.InvariantCulture, "KlarnaCheckout: Order refunded. InvoiceNumber: {0}, AppliedTo: {1}",
+                    result, result), customer: order.Customer);
 
-            order.OrderNotes.Add(new OrderNote
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order has been refunded. Invoice Number: {0}; Refund applied to: {1}",
+                        order.CaptureTransactionId, result),
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+            }
+            catch (Exception ex)
             {
-                Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order has been refunded. Invoice Number: {0}; Refund applied to: {1}",
-                    order.CaptureTransactionId, result),
-                CreatedOnUtc = DateTime.UtcNow,
-                DisplayToCustomer = false
-            });
-            _orderService.UpdateOrder(order);
-
-            return result;
+                throw new KlarnaCheckoutException("An error occurred when refunding order " + order.Id, ex);
+            }
         }
 
-        public bool Capture(global::Nop.Core.Domain.Orders.Order order)
+        public ActivateReservationResponse Activate(global::Nop.Core.Domain.Orders.Order order)
         {
             var reservation = order.AuthorizationTransactionId;
+
+            if (!string.IsNullOrEmpty(order.CaptureTransactionId))
+            {
+                throw new KlarnaCheckoutException("The payment has already been captured. Order Id: " + order.Id);
+            }
 
             try
             {
@@ -315,41 +311,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 };
 
                 var api = new Api(configuration);
-                var activationResult = api.Activate(reservation);
-
-                order.OrderNotes.Add(new OrderNote
-                {
-                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna order has been captured. Reservation: {0}, RiskStatus: {1}, InvoiceNumber: {2}",
-                    reservation, activationResult.RiskStatus, activationResult.InvoiceNumber),
-                    CreatedOnUtc = DateTime.UtcNow,
-                    DisplayToCustomer = false
-                });
-                order.CaptureTransactionId = activationResult.InvoiceNumber;
-                _orderService.UpdateOrder(order);
-
-                var klarnaRequest = _klarnaRepository.Table.FirstOrDefault(x => x.OrderGuid == order.OrderGuid);
-                if (klarnaRequest != null)
-                {
-                    klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
-                    _klarnaRepository.Update(klarnaRequest);
-                }
-
-                return true;
+                return api.Activate(reservation);
             }
             catch (Exception ex)
             {
-                order.OrderNotes.Add(new OrderNote
-                {
-                    Note = "KlarnaCheckout: An error occurred when the payment was being captured. See the error log for more information.",
-                    CreatedOnUtc = DateTime.UtcNow,
-                    DisplayToCustomer = false
-                });
-                _orderService.UpdateOrder(order);
-
-                _logger.Error("KlarnaCheckout: Error activating reservation: " + reservation, exception: ex, customer: order.Customer);
+                throw new KlarnaCheckoutException("Error activating Klarna reservation for order " + order.Id, ex);
             }
-
-            return false;
         }
     }
 }

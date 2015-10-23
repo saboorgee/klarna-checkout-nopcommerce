@@ -7,17 +7,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
     public interface IKlarnaCheckoutPaymentService
     {
-        void Acknowledge(Uri resourceUri, Order order);
+        void Acknowledge(Order order);
+        ActivateReservationResponse Activate(Order order);
         Uri Create();
         Klarna.Checkout.Order Fetch(Uri resourceUri);
         bool Update(Uri resourceUri);
         void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaOrder klarnaOrder);
         bool CancelPayment(string reservation, global::Nop.Core.Domain.Customers.Customer customer);
-        string FullRefund(Order order);
-
-        /// <summary>
-        /// Captures (activates) the klarna payment based on the order's AuthorizationTransactionId (reservation number).
-        /// </summary>
-        bool Capture(Order order);
+        void FullRefund(Order order);
     }
 }

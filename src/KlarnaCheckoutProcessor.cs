@@ -9,8 +9,11 @@ using Nop.Services.Payments;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Web.Routing;
 using Klarna.Api;
+using Nop.Core.Data;
+using Nop.Core.Domain.Payments;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
 
@@ -24,17 +27,20 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         private readonly IKlarnaCheckoutHelper _klarnaCheckout;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
         private readonly IOrderService _orderService;
+        private readonly IRepository<KlarnaCheckoutEntity> _repository;
 
         public KlarnaCheckoutProcessor(
             ILogger logger,
             IKlarnaCheckoutHelper klarnaCheckout,
             IKlarnaCheckoutPaymentService klarnaCheckoutPaymentService,
-            IOrderService orderService)
+            IOrderService orderService,
+            IRepository<KlarnaCheckoutEntity> repository)
         {
             _logger = logger;
             _klarnaCheckout = klarnaCheckout;
             _klarnaCheckoutPaymentService = klarnaCheckoutPaymentService;
             _orderService = orderService;
+            _repository = repository;
         }
 
         public ProcessPaymentResult ProcessPayment(ProcessPaymentRequest processPaymentRequest)
@@ -44,6 +50,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
         public void PostProcessPayment(PostProcessPaymentRequest postProcessPaymentRequest)
         {
+            _klarnaCheckoutPaymentService.Acknowledge(postProcessPaymentRequest.Order);
         }
 
         public bool HidePaymentMethod(IList<ShoppingCartItem> cart)
@@ -60,13 +67,53 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
 
         public CapturePaymentResult Capture(CapturePaymentRequest capturePaymentRequest)
         {
-            var order = capturePaymentRequest.Order;
-            var captured = _klarnaCheckoutPaymentService.Capture(order);
             var result = new CapturePaymentResult();
+            var order = capturePaymentRequest.Order;
 
-            if (!captured)
+            if (!string.IsNullOrEmpty(order.CaptureTransactionId))
             {
-                result.AddError("The order could not be captured.");
+                result.AddError("The payment has already been captured.");
+                return result;
+            }
+
+            try
+            {
+                var activationResult = _klarnaCheckoutPaymentService.Activate(order);
+
+                result.NewPaymentStatus = PaymentStatus.Paid;
+                result.CaptureTransactionId = activationResult.InvoiceNumber;
+
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna order has been captured. Reservation: {0}, RiskStatus: {1}, InvoiceNumber: {2}",
+                    order.AuthorizationTransactionId, activationResult.RiskStatus, activationResult.InvoiceNumber),
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+
+                var klarnaRequest = _repository.Table.FirstOrDefault(x => x.OrderGuid == order.OrderGuid);
+                if (klarnaRequest != null)
+                {
+                    klarnaRequest.Status = KlarnaCheckoutStatus.Activated;
+                    _repository.Update(klarnaRequest);
+                }
+            }
+            catch (KlarnaCheckoutException ex)
+            {
+                order.OrderNotes.Add(new OrderNote
+                {
+                    Note = "KlarnaCheckout: An error occurred when the payment was being captured. See the error log for more information.",
+                    CreatedOnUtc = DateTime.UtcNow,
+                    DisplayToCustomer = false
+                });
+                _orderService.UpdateOrder(order);
+
+                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error capturing payment. Order Number: {0}",
+                    order.Id),
+                    exception: ex,
+                    customer: order.Customer);
+                result.AddError("An error occurred while capturing the payment. See the error log for more information.");
             }
 
             return result;
@@ -94,10 +141,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             {
                 _klarnaCheckoutPaymentService.FullRefund(refundPaymentRequest.Order);
             }
-            catch (KlarnaException ke)
+            catch (KlarnaCheckoutException kce)
             {
-                _logger.Error("KlarnaCheckout: Error refunding reservation: " + order.AuthorizationTransactionId,
-                    exception: ke,
+                _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Error refunding klarna order. Reservation Number: {0}; Invoice Number: {1}",
+                    order.AuthorizationTransactionId, order.CaptureTransactionId),
+                    exception: kce,
                     customer: order.Customer);
                 result.AddError("An error occurred while refundinging the order. See the error log for more information.");
             }
@@ -166,12 +214,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         public bool SupportRefund { get { return true; } }
         public bool SupportVoid { get { return false; } }
         public RecurringPaymentType RecurringPaymentType { get { return RecurringPaymentType.NotSupported; } }
-        public PaymentMethodType PaymentMethodType { get {return PaymentMethodType.Standard;} }
+        public PaymentMethodType PaymentMethodType { get { return PaymentMethodType.Standard; } }
         public bool SkipPaymentInfo { get { return false; } }
 
         public override void Install()
         {
-            var context = EngineContext.Current.Resolve<KlarnaCheckoutContext > ();
+            var context = EngineContext.Current.Resolve<KlarnaCheckoutContext>();
             context.Install();
 
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Settings.EId", "Butiks-ID (EID)");
@@ -194,7 +242,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.RenderingError", "Error showing Klarna Checkout");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.Unauthorized", "Unauthorized.");
             this.AddOrUpdatePluginLocaleResource("Motillo.Plugin.KlarnaCheckout.Text.ThankYouError", "An error occured while creating the order.");
-            
+
             base.Install();
         }
 

@@ -22,6 +22,7 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Web.Mvc;
+using Nop.Core.Domain.Shipping;
 using Customer = Nop.Core.Domain.Customers.Customer;
 using Order = Nop.Core.Domain.Orders.Order;
 
@@ -43,6 +44,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly ILocalizationService _localizationService;
         private readonly IKlarnaCheckoutHelper _klarnaCheckoutHelper;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
+        private readonly IPaymentService _paymentService;
 
         // Used so that the push and thank you actions don't race. For the Google Analytics widget to work, the ThankYou action
         // needs to redirect to checkout/completed.
@@ -63,7 +65,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             IStoreService storeService,
             ILocalizationService localizationService,
             IKlarnaCheckoutHelper klarnaCheckoutHelper,
-            IKlarnaCheckoutPaymentService klarnaHelper)
+            IKlarnaCheckoutPaymentService klarnaHelper,
+            IPaymentService paymentService)
         {
             _workContext = workContext;
             _settingService = settingService;
@@ -79,6 +82,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _localizationService = localizationService;
             _klarnaCheckoutHelper = klarnaCheckoutHelper;
             _klarnaCheckoutPaymentService = klarnaHelper;
+            _paymentService = paymentService;
         }
 
         public override IList<string> ValidatePaymentForm(System.Web.Mvc.FormCollection form)
@@ -411,12 +415,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             // Order was successfully created.
             var orderId = placeOrderResult.PlacedOrder.Id;
             var nopOrder = _orderService.GetOrderById(orderId);
-
-            _klarnaCheckoutPaymentService.Acknowledge(resourceUri, nopOrder);
-
-            nopOrder.AuthorizationTransactionId = klarnaOrder.Reservation;
-            _orderService.UpdateOrder(nopOrder);
-
+            var klarnaPayment =
+                _paymentService.LoadPaymentMethodBySystemName(KlarnaCheckoutProcessor.PaymentMethodSystemName);
+            klarnaPayment.PostProcessPayment(new PostProcessPaymentRequest
+            {
+                Order = nopOrder
+            });
+            
             var orderTotalInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(nopOrder.OrderTotal, _workContext.WorkingCurrency);
 
             // We need to ensure the shopping cart wasn't tampered with before the user confirmed the Klarna order.
@@ -444,13 +449,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 });
                 _orderService.UpdateOrder(nopOrder);
 
-                if (_orderProcessingService.CanMarkOrderAsPaid(nopOrder))
+                if (_orderProcessingService.CanMarkOrderAsAuthorized(nopOrder))
                 {
-                    _orderProcessingService.MarkOrderAsPaid(nopOrder);
+                    _orderProcessingService.MarkAsAuthorized(nopOrder);
 
                     // Sometimes shipping isn't required, e.g. if only ordering virtual gift cards.
                     // In those cases, make sure the Klarna order is activated.
-                    if (nopOrder.OrderStatus == OrderStatus.Complete)
+                    if (nopOrder.OrderStatus == OrderStatus.Complete || nopOrder.ShippingStatus == ShippingStatus.ShippingNotRequired)
                     {
                         nopOrder.OrderNotes.Add(new OrderNote
                         {
@@ -460,7 +465,10 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                         });
                         _orderService.UpdateOrder(nopOrder);
 
-                        _klarnaCheckoutPaymentService.Capture(nopOrder);
+                        if (_orderProcessingService.CanCapture(nopOrder))
+                        {
+                            _orderProcessingService.Capture(nopOrder);
+                        }
                     }
                 }
             }
