@@ -263,10 +263,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 }
             }
 
-            var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
-            var data = order.Marshal();
-            var jsonData = JsonConvert.SerializeObject(data);
-            var klarnaOrder = JsonConvert.DeserializeObject<KlarnaOrder>(jsonData);
+            var apiOrder = _klarnaCheckoutPaymentService.Fetch(resourceUri);
+            var klarnaOrder = KlarnaCheckoutOrder.FromApiOrder(apiOrder);
 
             var model = new PaymentInfoModel
             {
@@ -299,9 +297,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 try
                 {
                     Order nopOrder;
-                    KlarnaOrder klarnaOrder;
+                    KlarnaCheckoutOrder klarnaCheckoutOrder;
 
-                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaOrder);
+                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaCheckoutOrder);
                 }
                 catch (Exception ex)
                 {
@@ -334,12 +332,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 }
 
                 var customer = _customerService.GetCustomerById(klarnaRequest.CustomerId);
-                KlarnaOrder klarnaOrder;
+                KlarnaCheckoutOrder klarnaCheckoutOrder;
                 Order nopOrder;
 
                 try
                 {
-                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaOrder);
+                    SyncKlarnaAndNopOrder(klarnaRequest, customer, out nopOrder, out klarnaCheckoutOrder);
                 }
                 catch (Exception ex)
                 {
@@ -347,45 +345,43 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                     return View("~/Plugins/Motillo.KlarnaCheckout/Views/KlarnaCheckout/ThankYouError.cshtml");
                 }
 
-                if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete || klarnaOrder.Status == KlarnaOrder.StatusCreated)
+                if (klarnaCheckoutOrder.Status == KlarnaCheckoutOrder.StatusCheckoutComplete || klarnaCheckoutOrder.Status == KlarnaCheckoutOrder.StatusCreated)
                 {
-                    TempData["KlarnaSnippet"] = klarnaOrder.Gui.Snippet;
-                    ViewBag.KlarnaSnippet = klarnaOrder.Gui.Snippet;
+                    TempData["KlarnaSnippet"] = klarnaCheckoutOrder.Gui.Snippet;
+                    ViewBag.KlarnaSnippet = klarnaCheckoutOrder.Gui.Snippet;
                 }
 
                 return RedirectToRoute("CheckoutCompleted", new { orderId = nopOrder.Id });
             }
         }
 
-        private void SyncKlarnaAndNopOrder(KlarnaCheckoutEntity klarnaRequest, Customer customer, out Order nopOrder, out KlarnaOrder klarnaOrder)
+        private void SyncKlarnaAndNopOrder(KlarnaCheckoutEntity klarnaRequest, Customer customer, out Order nopOrder, out KlarnaCheckoutOrder klarnaCheckoutOrder)
         {
             nopOrder = _orderService.GetOrderByGuid(klarnaRequest.OrderGuid);
             var resourceUri = new Uri(klarnaRequest.KlarnaResourceUri);
-            var order = _klarnaCheckoutPaymentService.Fetch(resourceUri);
-            var data = order.Marshal();
-            var jsonData = JsonConvert.SerializeObject(data);
+            var apiOrder = _klarnaCheckoutPaymentService.Fetch(resourceUri);
 
-            klarnaOrder = JsonConvert.DeserializeObject<Models.KlarnaOrder>(jsonData);
+            klarnaCheckoutOrder = KlarnaCheckoutOrder.FromApiOrder(apiOrder);
 
             // Create the order if it doesn't exist in nop. According to the Klarna Checkout
             // developer guidelines, one should only create the order if the status is
             // 'checkout_complete'.
             // https://developers.klarna.com/en/klarna-checkout/acknowledge-an-order
-            if (nopOrder == null && klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
+            if (nopOrder == null && klarnaCheckoutOrder.Status == KlarnaCheckoutOrder.StatusCheckoutComplete)
             {
-                if (klarnaOrder.Status == KlarnaOrder.StatusCheckoutComplete)
+                if (klarnaCheckoutOrder.Status == KlarnaCheckoutOrder.StatusCheckoutComplete)
                 {
                     klarnaRequest.Status = KlarnaCheckoutStatus.Complete;
                     _repository.Update(klarnaRequest);
                 }
 
-                _klarnaCheckoutPaymentService.SyncBillingAndShippingAddress(customer, klarnaOrder);
+                _klarnaCheckoutPaymentService.SyncBillingAndShippingAddress(customer, klarnaCheckoutOrder);
 
-                nopOrder = CreateOrderAndSyncWithKlarna(klarnaRequest, customer, klarnaOrder, resourceUri);
+                nopOrder = CreateOrderAndSyncWithKlarna(klarnaRequest, customer, klarnaCheckoutOrder, resourceUri);
             }
         }
 
-        private Order CreateOrderAndSyncWithKlarna(KlarnaCheckoutEntity klarnaRequest, Customer customer, KlarnaOrder klarnaOrder, Uri resourceUri)
+        private Order CreateOrderAndSyncWithKlarna(KlarnaCheckoutEntity klarnaRequest, Customer customer, KlarnaCheckoutOrder klarnaCheckoutOrder, Uri resourceUri)
         {
             var processPaymentRequest = new ProcessPaymentRequest
             {
@@ -402,9 +398,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             {
                 var errors = string.Join("; ", placeOrderResult.Errors);
                 _logger.Error(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Klarna has been processed but order could not be created in Nop! Klarna ID={0}, ResourceURI={1}. Errors: {2}",
-                    klarnaOrder.Id, klarnaRequest.KlarnaResourceUri, errors), customer: customer);
+                    klarnaCheckoutOrder.Id, klarnaRequest.KlarnaResourceUri, errors), customer: customer);
 
-                _klarnaCheckoutPaymentService.CancelPayment(klarnaOrder.Reservation, customer);
+                _klarnaCheckoutPaymentService.CancelPayment(klarnaCheckoutOrder.Reservation, customer);
 
                 throw new KlarnaCheckoutException("Error creating order: " + errors);
             }
@@ -434,7 +430,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             // 1.11 + 2.11 is sent to Klarna, which totals 3.22.
 
             var allowedPriceDiff = orderTotalInCurrentCurrency * 0.01m;
-            var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaOrder.Cart.TotalPriceIncludingTax.Value / 100m));
+            var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaCheckoutOrder.Cart.TotalPriceIncludingTax.Value / 100m));
 
             if (diff < allowedPriceDiff)
             {
@@ -476,7 +472,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 nopOrder.OrderNotes.Add(new OrderNote
                 {
                     Note = string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order total differs from Klarna order. OrderTotal: {0}, OrderTotalInCents: {1}, KlarnaTotal: {2}, AllowedDiff: {3}, Diff: {4}, Uri: {5}",
-                        orderTotalInCurrentCurrency, orderTotalInCents, klarnaOrder.Cart.TotalPriceIncludingTax, allowedPriceDiff, diff, resourceUri),
+                        orderTotalInCurrentCurrency, orderTotalInCents, klarnaCheckoutOrder.Cart.TotalPriceIncludingTax, allowedPriceDiff, diff, resourceUri),
                     DisplayToCustomer = false,
                     CreatedOnUtc = DateTime.UtcNow
                 });

@@ -244,7 +244,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
     }
 
     [DebuggerDisplay("{Id}: {Status}")]
-    public class KlarnaOrder
+    public class KlarnaCheckoutOrder
     {
         public const string StatusCheckoutIncomplete = "checkout_incomplete";
         public const string StatusCheckoutComplete = "checkout_complete";
@@ -308,15 +308,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
             return JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonData);
         }
 
-        public static KlarnaOrder FromDictionary(IDictionary<string, object> data)
+        public static KlarnaCheckoutOrder FromApiOrder(Klarna.Checkout.Order order)
         {
-            if (data == null)
-            {
-                return new KlarnaOrder();
-            }
+            if (order == null) throw new ArgumentNullException(nameof(order));
 
+            var data = order.Marshal();
             var jsonData = JsonConvert.SerializeObject(data);
-            return JsonConvert.DeserializeObject<KlarnaOrder>(jsonData);
+
+            return JsonConvert.DeserializeObject<KlarnaCheckoutOrder>(jsonData);
         }
     }
 }

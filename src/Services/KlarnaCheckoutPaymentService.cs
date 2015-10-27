@@ -65,15 +65,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             {
                 var entity = _klarnaRepository.Table.First(x => x.OrderGuid == order.OrderGuid);
                 var resourceUri = new Uri(entity.KlarnaResourceUri);
-                var klarnaOrder = Fetch(resourceUri);
-                var fetchedData = klarnaOrder.Marshal();
-                var typedData = KlarnaOrder.FromDictionary(fetchedData);
+                var apiOrder = Fetch(resourceUri);
+                var klarnaOrder = KlarnaCheckoutOrder.FromApiOrder(apiOrder);
 
-                if (typedData.Status == KlarnaOrder.StatusCheckoutComplete)
+                if (klarnaOrder.Status == KlarnaCheckoutOrder.StatusCheckoutComplete)
                 {
-                    var updateData = new KlarnaOrder
+                    var updateData = new KlarnaCheckoutOrder
                     {
-                        Status = KlarnaOrder.StatusCreated,
+                        Status = KlarnaCheckoutOrder.StatusCreated,
                         MerchantReference = new MerchantReference
                         {
                             OrderId1 = order.Id.ToString(CultureInfo.InvariantCulture),
@@ -83,9 +82,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
                     var dictData = updateData.ToDictionary();
 
-                    klarnaOrder.Update(dictData);
+                    apiOrder.Update(dictData);
 
-                    order.AuthorizationTransactionId = typedData.Reservation;
+                    order.AuthorizationTransactionId = klarnaOrder.Reservation;
                     _orderService.UpdateOrder(order);
                 }
             }
@@ -104,7 +103,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var options = _klarnaCheckoutUtils.GetOptions();
             var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
 
-            var klarnaOrder = new KlarnaOrder
+            var klarnaOrder = new KlarnaCheckoutOrder
             {
                 Cart = cart,
                 Merchant = merchant,
@@ -166,7 +165,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
 
-                var klarnaOrder = new KlarnaOrder
+                var klarnaOrder = new KlarnaCheckoutOrder
                 {
                     Cart = cart,
                     Options = options,
@@ -193,12 +192,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return false;
         }
 
-        public void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaOrder klarnaOrder)
+        public void SyncBillingAndShippingAddress(global::Nop.Core.Domain.Customers.Customer customer, KlarnaCheckoutOrder klarnaCheckoutOrder)
         {
             try
             {
-                var billingAddress = klarnaOrder.BillingAddress;
-                var shippingAddress = klarnaOrder.ShippingAddress;
+                var billingAddress = klarnaCheckoutOrder.BillingAddress;
+                var shippingAddress = klarnaCheckoutOrder.ShippingAddress;
 
                 var nopBillingAddress = customer.Addresses.FirstOrDefault(billingAddress.RepresentsAddress);
                 if (nopBillingAddress == null)
@@ -224,8 +223,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
             catch (Exception ex)
             {
-                var billing = JsonConvert.SerializeObject(klarnaOrder.BillingAddress);
-                var shipping = JsonConvert.SerializeObject(klarnaOrder.ShippingAddress);
+                var billing = JsonConvert.SerializeObject(klarnaCheckoutOrder.BillingAddress);
+                var shipping = JsonConvert.SerializeObject(klarnaCheckoutOrder.ShippingAddress);
                 throw new KlarnaCheckoutException(string.Format(CultureInfo.CurrentCulture, "Error syncing addresses. Billing: {0}, Shipping: {1}", billing, shipping), ex);
             }
         }
