@@ -279,11 +279,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         [HttpPost]
         public void KlarnaCheckoutPush(string sid, string klarna_order)
         {
-            _logger.Information(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Push URI request. sid: {0}, uri: {1}",
-                sid, klarna_order));
-
             lock (Locker.GetOrAdd(klarna_order, new object()))
             {
+                _logger.Information(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Push URI request. sid: {0}, uri: {1}",
+                    sid, klarna_order));
+
                 var klarnaRequest = _repository.Table
                     .OrderByDescending(x => x.CreatedOnUtc)
                     .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
@@ -312,12 +312,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
 
         public ActionResult ThankYou(string sid, string klarna_order)
         {
-            _logger.Information(string.Format(CultureInfo.CurrentCulture,
-                    "KlarnaCheckout: Thank you request. Sid: {0}, klarna_order: {1}",
-                    sid, klarna_order));
-
             lock (Locker.GetOrAdd(klarna_order, new object()))
             {
+                _logger.Information(string.Format(CultureInfo.CurrentCulture,
+                        "KlarnaCheckout: Thank you request. Sid: {0}, klarna_order: {1}",
+                        sid, klarna_order));
+
                 var klarnaRequest = _repository.Table
                     .OrderByDescending(x => x.CreatedOnUtc)
                     .FirstOrDefault(x => x.KlarnaResourceUri == klarna_order);
@@ -325,6 +325,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 if (klarnaRequest == null)
                 {
                     _logger.Warning("KlarnaCheckout: Got thank you request for Klarna request not found. ResourceURI = " + klarna_order);
+                    return RedirectToAction("Index", "Home");
+                }
+
+                if (_orderSettings.DisableOrderCompletedPage)
+                {
                     return RedirectToAction("Index", "Home");
                 }
 
@@ -346,11 +351,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                 {
                     TempData["KlarnaSnippet"] = klarnaOrder.Gui.Snippet;
                     ViewBag.KlarnaSnippet = klarnaOrder.Gui.Snippet;
-                }
-
-                if (_orderSettings.DisableOrderCompletedPage)
-                {
-                    return RedirectToAction("Index", "Home");
                 }
 
                 return RedirectToRoute("CheckoutCompleted", new { orderId = nopOrder.Id });
@@ -418,7 +418,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             {
                 Order = nopOrder
             });
-            
+
             var orderTotalInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(nopOrder.OrderTotal, _workContext.WorkingCurrency);
 
             // We need to ensure the shopping cart wasn't tampered with before the user confirmed the Klarna order.
