@@ -24,12 +24,7 @@ Installation can be done either from the precompiled package or directly from so
 After installation, make sure to edit the `Checkout/Completed.cshtml` view so that the Klarna confirmation snippet is shown.
 
 ```csharp
-@if (TempData["KlarnaSnippet"] is string)
-{
-    <div class="row">
-        @Html.Raw((string)TempData["KlarnaSnippet"])
-    </div>
-}
+@Html.Action("ConfirmationSnippet", "KlarnaCheckout", new { orderId = Model.OrderId })
 ```
 
 ### From Package

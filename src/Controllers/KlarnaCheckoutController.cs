@@ -355,6 +355,51 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             }
         }
 
+        [HttpGet]
+        [ChildActionOnly]
+        public ActionResult ConfirmationSnippet(int orderId)
+        {
+            var order = _orderService.GetOrderById(orderId);
+
+            if (order == null || order.PaymentMethodSystemName != KlarnaCheckoutProcessor.PaymentMethodSystemName)
+            {
+                return Content(string.Empty);
+            }
+
+            var klarnaRequest = _repository.Table.FirstOrDefault(x => x.OrderGuid == order.OrderGuid);
+            if (klarnaRequest == null)
+            {
+                _logger.Warning(string.Format(CultureInfo.CurrentCulture,
+                    "KlarnaCheckout: Didn't find entity for order payed with Klarna. Order Id: {0}", orderId));
+                return Content(string.Empty);
+            }
+
+            try
+            {
+                var apiOrder = _klarnaCheckoutPaymentService.Fetch(new Uri(klarnaRequest.KlarnaResourceUri));
+                var klarnaOrder = KlarnaCheckoutOrder.FromApiOrder(apiOrder);
+
+                if (klarnaOrder.Status != KlarnaCheckoutOrder.StatusCheckoutComplete && klarnaOrder.Status != KlarnaCheckoutOrder.StatusCreated)
+                {
+                    _logger.Warning(string.Format(CultureInfo.CurrentCulture,
+                        "KlarnaCheckout: Cannot show confirmation snippet for Klarna order that is not marked as complete or created. Order Id: {0}; Status: {1}; Resource URI: {2}",
+                        orderId, klarnaOrder.Status, klarnaRequest.KlarnaResourceUri));
+                    return Content(string.Empty);
+                }
+
+                return Content(klarnaOrder.Gui.Snippet);
+            }
+            catch (KlarnaCheckoutException kce)
+            {
+                _logger.Error(string.Format(CultureInfo.CurrentCulture,
+                        "KlarnaCheckout: Error when fetching and getting Klarna confirmation snippet. Order Id: {0}; Resource URI: {1}",
+                        orderId, klarnaRequest.KlarnaResourceUri),
+                        exception: kce, customer: order.Customer);
+            }
+
+            return Content(string.Empty);
+        }
+
         private void SyncKlarnaAndNopOrder(KlarnaCheckoutEntity klarnaRequest, Customer customer, out Order nopOrder, out KlarnaCheckoutOrder klarnaCheckoutOrder)
         {
             nopOrder = _orderService.GetOrderByGuid(klarnaRequest.OrderGuid);

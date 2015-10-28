@@ -146,13 +146,20 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public Order Fetch(Uri resourceUri)
         {
-            var klarnaOrderId = _klarnaCheckoutUtils.GetOrderIdFromUri(resourceUri);
-            var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
-            var order = new Klarna.Checkout.Order(connector, klarnaOrderId);
+            try
+            {
+                var klarnaOrderId = _klarnaCheckoutUtils.GetOrderIdFromUri(resourceUri);
+                var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
+                var order = new Klarna.Checkout.Order(connector, klarnaOrderId);
 
-            order.Fetch();
+                order.Fetch();
 
-            return order;
+                return order;
+            }
+            catch (Exception ex)
+            {
+                throw new KlarnaCheckoutException("Error fetching klarna order: " + resourceUri, ex);
+            }
         }
 
         public bool Update(Uri resourceUri)
