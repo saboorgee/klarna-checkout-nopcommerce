@@ -5,9 +5,12 @@ Klarna Checkout plugin for [nopCommerce](http://nopcommerce.codeplex.com/) 3.50.
 ## Features
 
 - Implemented as a nopCommerce payment method.
+- Supports capture.
+   - Automatic capture when the order is marked as shipped.
+- Supports voiding an authorized (but not captured) payment.
+- Supports full refund.
 - Test/live mode.
 - Configuration of snippet colors.
-- Automatic activation of the Klarna order when the nop order is marked as shipped.
 - Works with the "Google Analytics or Universal Analytics" widget.
 
 ## Premium Support
