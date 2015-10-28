@@ -140,6 +140,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
             try
             {
                 _klarnaCheckoutPaymentService.FullRefund(refundPaymentRequest.Order);
+                result.NewPaymentStatus = PaymentStatus.Refunded;
             }
             catch (KlarnaCheckoutException kce)
             {
