@@ -65,6 +65,17 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Data
             throw new NotSupportedException();
         }
 
+        public void Detach(object entity)
+        {
+            if (entity == null)
+                throw new ArgumentNullException("entity");
+
+            ((IObjectContextAdapter)this).ObjectContext.Detach(entity);
+        }
+
+        public bool ProxyCreationEnabled { get; set; }
+        public bool AutoDetectChangesEnabled { get; set; }
+
         public int ExecuteSqlCommand(string sql, int? timeout = null, params object[] parameters)
         {
             throw new NotSupportedException();

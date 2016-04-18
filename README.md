@@ -1,6 +1,6 @@
 # Klarna Checkout for nopCommerce
 
-Klarna Checkout plugin for [nopCommerce](http://nopcommerce.codeplex.com/) 3.50.
+Klarna Checkout plugin for [nopCommerce](http://nopcommerce.codeplex.com/) 3.70.
 
 ## Features
 

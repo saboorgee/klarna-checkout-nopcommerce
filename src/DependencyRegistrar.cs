@@ -2,6 +2,7 @@
 using Autofac.Core;
 using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
+using Nop.Core.Configuration;
 using Nop.Core.Data;
 using Nop.Core.Infrastructure;
 using Nop.Core.Infrastructure.DependencyManagement;
@@ -14,7 +15,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
     {
         private const string ContextName = "Motillo_Context_KlarnaCheckoutRequest";
 
-        public virtual void Register(ContainerBuilder builder, ITypeFinder typeFinder)
+        public void Register(ContainerBuilder builder, ITypeFinder typeFinder, NopConfig config)
         {
             builder.RegisterType<KlarnaCheckoutHelper>().As<IKlarnaCheckoutHelper>().InstancePerLifetimeScope();
             builder.RegisterType<KlarnaCheckoutPaymentService>().As<IKlarnaCheckoutPaymentService>().InstancePerLifetimeScope();

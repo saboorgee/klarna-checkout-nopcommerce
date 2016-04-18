@@ -1,15 +1,15 @@
-﻿using Nop.Core.Domain.Orders;
+﻿using System;
+using System.Globalization;
+using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Payments;
 using Nop.Core.Domain.Shipping;
 using Nop.Core.Plugins;
 using Nop.Services.Events;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
-using System;
-using System.Globalization;
-using Nop.Core.Domain.Payments;
 using Nop.Services.Payments;
 
-namespace Motillo.Nop.Plugin.KlarnaCheckout
+namespace Motillo.Nop.Plugin.KlarnaCheckout.Plugins
 {
     public class OrderActivationPlugin : BasePlugin, IConsumer<ShipmentSentEvent>
     {
