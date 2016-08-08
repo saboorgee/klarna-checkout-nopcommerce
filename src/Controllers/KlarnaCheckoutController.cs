@@ -25,6 +25,11 @@ using System.Web.Mvc;
 using Nop.Core.Domain.Shipping;
 using Customer = Nop.Core.Domain.Customers.Customer;
 using Order = Nop.Core.Domain.Orders.Order;
+using Nop.Core.Domain.Customers;
+using Nop.Services.Catalog;
+using Nop.Services.Common;
+using Nop.Services.Shipping;
+using Nop.Services.Orders;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
 {
@@ -45,6 +50,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private readonly IKlarnaCheckoutHelper _klarnaCheckoutHelper;
         private readonly IKlarnaCheckoutPaymentService _klarnaCheckoutPaymentService;
         private readonly IPaymentService _paymentService;
+        private readonly IShoppingCartService _shoppingCartService;
+        private readonly IProductService _productService;
+        private readonly IShippingService _shippingService;
+        private readonly IGenericAttributeService _genericAttributeService;
+        private readonly IGiftCardService _giftCardService;
+        private readonly ICheckoutAttributeParser _checkoutAttributeParser;
+        private readonly ICheckoutAttributeService _checkoutAttributeService;
 
         // Used so that the push and thank you actions don't race. For the Google Analytics widget to work, the ThankYou action
         // needs to redirect to checkout/completed.
@@ -66,7 +78,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             ILocalizationService localizationService,
             IKlarnaCheckoutHelper klarnaCheckoutHelper,
             IKlarnaCheckoutPaymentService klarnaHelper,
-            IPaymentService paymentService)
+            IPaymentService paymentService,
+            IShoppingCartService shoppingCartService,
+            IProductService productService,
+            IShippingService shippingService,
+            IGenericAttributeService genericAttributeService,
+            IGiftCardService giftCardService, ICheckoutAttributeParser checkoutAttributeParser, ICheckoutAttributeService checkoutAttributeService)
         {
             _workContext = workContext;
             _settingService = settingService;
@@ -83,6 +100,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             _klarnaCheckoutHelper = klarnaCheckoutHelper;
             _klarnaCheckoutPaymentService = klarnaHelper;
             _paymentService = paymentService;
+            _shoppingCartService = shoppingCartService;
+            _productService = productService;
+            _shippingService = shippingService;
+            _genericAttributeService = genericAttributeService;
+            _giftCardService = giftCardService;
+            _checkoutAttributeParser = checkoutAttributeParser;
+            _checkoutAttributeService = checkoutAttributeService;
         }
 
         public override IList<string> ValidatePaymentForm(System.Web.Mvc.FormCollection form)
@@ -428,6 +452,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
 
         private Order CreateOrderAndSyncWithKlarna(KlarnaCheckoutEntity klarnaRequest, Customer customer, KlarnaCheckoutOrder klarnaCheckoutOrder, Uri resourceUri)
         {
+            SyncCartWithKlarnaOrder(customer, klarnaCheckoutOrder);
+
             var processPaymentRequest = new ProcessPaymentRequest
             {
                 OrderGuid = klarnaRequest.OrderGuid,
@@ -462,9 +488,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
 
             var orderTotalInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(nopOrder.OrderTotal, _workContext.WorkingCurrency);
 
-            // We need to ensure the shopping cart wasn't tampered with before the user confirmed the Klarna order.
-            // If so an order may have been created which doesn't represent the paid items.
-
             // Due to rounding when using prices contains more than 2 decimals (e.g. currency conversion), we allow
             // a slight diff in paid price and nop's reported price.
             // For example nop rounds the prices after _all_ cart item prices have been summed but when sending
@@ -477,40 +500,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             var allowedPriceDiff = orderTotalInCurrentCurrency * 0.01m;
             var diff = Math.Abs(orderTotalInCurrentCurrency - (klarnaCheckoutOrder.Cart.TotalPriceIncludingTax.Value / 100m));
 
-            if (diff < allowedPriceDiff)
-            {
-                nopOrder.OrderNotes.Add(new OrderNote
-                {
-                    Note = "KlarnaCheckout: Order acknowledged. Uri: " + resourceUri,
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-                _orderService.UpdateOrder(nopOrder);
-
-                if (_orderProcessingService.CanMarkOrderAsAuthorized(nopOrder))
-                {
-                    _orderProcessingService.MarkAsAuthorized(nopOrder);
-
-                    // Sometimes shipping isn't required, e.g. if only ordering virtual gift cards.
-                    // In those cases, make sure the Klarna order is activated.
-                    if (nopOrder.OrderStatus == OrderStatus.Complete || nopOrder.ShippingStatus == ShippingStatus.ShippingNotRequired)
-                    {
-                        nopOrder.OrderNotes.Add(new OrderNote
-                        {
-                            Note = "KlarnaCheckout: Order complete after payment, will try to capture payment.",
-                            CreatedOnUtc = DateTime.UtcNow,
-                            DisplayToCustomer = false
-                        });
-                        _orderService.UpdateOrder(nopOrder);
-
-                        if (_orderProcessingService.CanCapture(nopOrder))
-                        {
-                            _orderProcessingService.Capture(nopOrder);
-                        }
-                    }
-                }
-            }
-            else
+            if (diff >= allowedPriceDiff)
             {
                 var orderTotalInCents = _klarnaCheckoutHelper.ConvertToCents(orderTotalInCurrentCurrency);
 
@@ -521,19 +511,157 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
                     DisplayToCustomer = false,
                     CreatedOnUtc = DateTime.UtcNow
                 });
-                nopOrder.OrderNotes.Add(new OrderNote
-                {
-                    Note = "KlarnaCheckout: Order total differs from paid amount to Klarna. Order has not been marked as paid. Please contact an administrator.",
-                    DisplayToCustomer = true,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-                _orderService.UpdateOrder(nopOrder);
+            }
 
-                _logger.Warning(string.Format(CultureInfo.CurrentCulture, "KlarnaCheckout: Order total differs. Please verify the sum and mark the order as paid in the administration. See order notes for more details. OrderId: {0}, OrderGuid: {1}",
-                    nopOrder.Id, nopOrder.OrderGuid), customer: customer);
+            nopOrder.OrderNotes.Add(new OrderNote
+            {
+                Note = "KlarnaCheckout: Order acknowledged. Uri: " + resourceUri,
+                DisplayToCustomer = false,
+                CreatedOnUtc = DateTime.UtcNow
+            });
+            _orderService.UpdateOrder(nopOrder);
+
+            if (_orderProcessingService.CanMarkOrderAsAuthorized(nopOrder))
+            {
+                _orderProcessingService.MarkAsAuthorized(nopOrder);
+
+                // Sometimes shipping isn't required, e.g. if only ordering virtual gift cards.
+                // In those cases, make sure the Klarna order is activated.
+                if (nopOrder.OrderStatus == OrderStatus.Complete || nopOrder.ShippingStatus == ShippingStatus.ShippingNotRequired)
+                {
+                    nopOrder.OrderNotes.Add(new OrderNote
+                    {
+                        Note = "KlarnaCheckout: Order complete after payment, will try to capture payment.",
+                        CreatedOnUtc = DateTime.UtcNow,
+                        DisplayToCustomer = false
+                    });
+                    _orderService.UpdateOrder(nopOrder);
+
+                    if (_orderProcessingService.CanCapture(nopOrder))
+                    {
+                        _orderProcessingService.Capture(nopOrder);
+                    }
+                }
             }
 
             return nopOrder;
+        }
+
+        private void SyncCartWithKlarnaOrder(Customer customer, KlarnaCheckoutOrder klarnaCheckoutOrder)
+        {
+            var currentStoreId = _storeContext.CurrentStore.Id;
+            var couponCodePrefix = string.Format(CultureInfo.CurrentUICulture, "{0}: ", _localizationService.GetResource("shoppingcart.discountcouponcode"));
+
+            var orderCurrency = _currencyService.GetCurrencyByCode(klarnaCheckoutOrder.PurchaseCurrency);
+            if (orderCurrency != null)
+                _workContext.WorkingCurrency = orderCurrency;
+
+            ClearItemsInCart(customer, currentStoreId);
+            ClearDiscountsAndShippingSelection(customer, currentStoreId);
+
+            var physicalItems = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypePhysical);
+            var appliedCoupons = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.HasCouponCode());
+            var appliedGiftCards = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsDiscountGiftCardCartItem());
+            var appliedRewardPoints = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsRewardPointsCartItem());
+            var checkoutAttributes = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsCheckoutAttribtue());
+            var shippingItems = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeShippingFee);
+
+            foreach (var physicalItem in physicalItems)
+            {
+                AddPhysicalItemToCart(customer, physicalItem, currentStoreId);
+            }
+
+            foreach (var coupon in appliedCoupons)
+            {
+                var couponCode = coupon.Name.Substring(couponCodePrefix.Length);
+                _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+            }
+
+            foreach (var giftCardCartItem in appliedGiftCards)
+            {
+                var giftCardId = giftCardCartItem.GetGiftCardIdFromDiscountGiftCardCartItem();
+                var giftCard = _giftCardService.GetGiftCardById(giftCardId);
+                customer.ApplyGiftCardCouponCode(giftCard.GiftCardCouponCode);
+            }
+
+            if (appliedRewardPoints.Any())
+            {
+                _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.UseRewardPointsDuringCheckout, true, currentStoreId);
+            }
+
+            var checkoutAttributesXml = GetSelectedCheckoutAttributesThatHasNotBeenSentToKlarna(customer, currentStoreId);
+            foreach (var item in checkoutAttributes)
+            {
+                var ca = _checkoutAttributeService.GetCheckoutAttributeById(item.GetCheckoutAttributeId());
+                checkoutAttributesXml = _checkoutAttributeParser.AddCheckoutAttribute(checkoutAttributesXml, ca, item.GetCheckoutAttributeValue());
+            }
+            _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.CheckoutAttributes, checkoutAttributesXml, currentStoreId);
+
+            foreach (var shippingItem in shippingItems)
+            {
+                AddShippingItemToCart(customer, shippingItem, currentStoreId);
+            }
+        }
+
+        private string GetSelectedCheckoutAttributesThatHasNotBeenSentToKlarna(Customer customer, int currentStoreId)
+        {
+            string checkoutAttributesXml = null;
+
+            var originalCheckoutAttributesXml = customer.GetAttribute<string>(SystemCustomerAttributeNames.CheckoutAttributes, currentStoreId);
+            var allCheckoutAttributes = _checkoutAttributeService.GetAllCheckoutAttributes(currentStoreId);
+
+            foreach (var checkoutAttribute in allCheckoutAttributes.Where(x => !x.ShouldHaveValues()))
+            {
+                var selectedValues = _checkoutAttributeParser.ParseValues(originalCheckoutAttributesXml, checkoutAttribute.Id);
+                foreach (var selectedValue in selectedValues)
+                {
+                    checkoutAttributesXml = _checkoutAttributeParser.AddCheckoutAttribute(checkoutAttributesXml, checkoutAttribute, selectedValue);
+                }
+            }
+
+            return checkoutAttributesXml;
+        }
+
+        private void ClearDiscountsAndShippingSelection(Customer customer, int storeId)
+        {
+            _genericAttributeService.SaveAttribute<string>(customer, SystemCustomerAttributeNames.GiftCardCouponCodes, null);
+            _genericAttributeService.SaveAttribute<string>(customer, SystemCustomerAttributeNames.DiscountCouponCode, null);
+            _genericAttributeService.SaveAttribute<ShippingOption>(customer, SystemCustomerAttributeNames.SelectedShippingOption, null, storeId);
+        }
+
+        private void AddShippingItemToCart(Customer customer, CartItem item, int currentStoreId)
+        {
+            var shippingOptions = _shippingService.GetShippingOptions(customer.ShoppingCartItems.ToList(), customer.ShippingAddress, storeId: currentStoreId);
+            if (shippingOptions.Success)
+            {
+                var selectedShippingOption = shippingOptions.ShippingOptions.SingleOrDefault(x => x.Name == item.Reference);
+                _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.SelectedShippingOption, selectedShippingOption, _storeContext.CurrentStore.Id);
+            }
+        }
+
+        private void AddPhysicalItemToCart(Customer customer, CartItem item, int currentStoreId)
+        {
+            var productId = item.GetProductIdFromPhysicalCartItem();
+            var attributesXml = item.GetAttributesXmlFromPhysicalCartItem();
+            var product = _productService.GetProductById(productId);
+
+            _shoppingCartService.AddToCart(
+                customer,
+                product,
+                ShoppingCartType.ShoppingCart,
+                currentStoreId,
+                attributesXml,
+                quantity: item.Quantity);
+        }
+
+        private void ClearItemsInCart(Customer customer, int storeId)
+        {
+            var itemsToRemove = customer.ShoppingCartItems.Where(x => x.StoreId == storeId && x.ShoppingCartType == ShoppingCartType.ShoppingCart).ToArray();
+
+            foreach (var item in itemsToRemove)
+            {
+                _shoppingCartService.DeleteShoppingCartItem(item, ensureOnlyActiveCheckoutAttributes: true);
+            }
         }
     }
 }

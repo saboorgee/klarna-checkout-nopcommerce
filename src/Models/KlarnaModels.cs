@@ -22,6 +22,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         [JsonProperty("reference", NullValueHandling = NullValueHandling.Ignore)]
         public string Reference { get; set; }
 
+        [JsonProperty("merchant_item_data", NullValueHandling = NullValueHandling.Ignore)]
+        public string MerchantItemData { get; set; }
+
         [JsonProperty("name")]
         public string Name { get; set; }
 

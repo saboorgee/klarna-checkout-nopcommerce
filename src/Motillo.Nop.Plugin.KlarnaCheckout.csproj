@@ -120,6 +120,7 @@
     <Compile Include="RouteProvider.cs" />
     <Compile Include="Services\IKlarnaCheckoutHelper.cs" />
     <Compile Include="Services\IKlarnaCheckoutPaymentService.cs" />
+    <Compile Include="Services\KlarnaCheckoutCartItemExtensions.cs" />
     <Compile Include="Services\KlarnaCheckoutHelper.cs" />
     <Compile Include="Services\KlarnaCheckoutPaymentService.cs" />
   </ItemGroup>

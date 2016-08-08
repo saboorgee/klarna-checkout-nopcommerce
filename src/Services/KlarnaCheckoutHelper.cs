@@ -147,7 +147,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             items.AddRange(GetCartItems(cartItems));
             items.Add(GetShippingItem(cartItems));
             items.AddRange(GetDiscountAndGiftCardItems(cartItems));
-            items.AddRange(GetCeckoutAttributeItems());
+            items.AddRange(GetCheckoutAttributeItems());
 
             return new Cart
             {
@@ -155,7 +155,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             };
         }
 
-        private IEnumerable<CartItem> GetCeckoutAttributeItems()
+        private IEnumerable<CartItem> GetCheckoutAttributeItems()
         {
             var result = new List<CartItem>();
             var storeId = _storeContext.CurrentStore.Id;
@@ -163,7 +163,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             var checkoutAttributesXml = customer.GetAttribute<string>(SystemCustomerAttributeNames.CheckoutAttributes, _genericAttributeService, storeId);
             var attributeValues = _checkoutAttributeParser.ParseCheckoutAttributeValues(checkoutAttributesXml);
-            
+
             if (attributeValues != null)
             {
                 foreach (var attributeValue in attributeValues)
@@ -180,12 +180,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     result.Add(new CartItem
                     {
                         Type = CartItem.TypeDiscount,
-                        Reference = string.Format("KC_CA_{0}_{1}", checkoutAttributePromptName, attributeValueName),
                         Name = name,
+                        Reference = string.Format("KC_CA_{0}_{1}", checkoutAttributePromptName, attributeValueName),
                         Quantity = 1,
                         UnitPrice = price,
                         TaxRate = taxRateInCents
-                    });
+                    }.WithCheckoutAttributeMerchantInfo(attributeValue.CheckoutAttributeId, attributeValue.Id.ToString(CultureInfo.InvariantCulture)));
                 }
             }
 
@@ -289,12 +289,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 result.Add(new CartItem
                 {
                     Type = CartItem.TypeDiscount,
-                    Reference = giftCard.GiftCard.Id.ToString(CultureInfo.InvariantCulture),
                     Name = _localizationService.GetResource("shoppingcart.giftcardcouponcode"),
+                    Reference = giftCard.GiftCard.Id.ToString(CultureInfo.InvariantCulture),
                     Quantity = 1,
                     UnitPrice = price,
                     TaxRate = 0
-                });
+                }.WithGiftCardMerchantInfo(giftCard.GiftCard.Id));
             }
 
             if (redeemedRewardPointsAmount > 0)
@@ -306,12 +306,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 result.Add(new CartItem
                 {
                     Type = CartItem.TypeDiscount,
-                    Reference = "KC_REWARD_POINTS",
                     Name = name,
+                    Reference = "KC_REWARD_POINTS",
                     Quantity = 1,
                     UnitPrice = discount,
                     TaxRate = 0
-                });
+                }.WithRewardPointsMerchantInfo());
             }
 
             if (orderDiscountAmount > 0)
@@ -333,7 +333,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     Quantity = 1,
                     UnitPrice = discount,
                     TaxRate = 0
-                });
+                }.WithDiscountCouponTotalCartItem(orderAppliedDiscount.CouponCode));
             }
 
             decimal subDiscountAmount;
@@ -356,12 +356,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 result.Add(new CartItem
                 {
                     Type = CartItem.TypeDiscount,
-                    Reference = "KC_D_S",
                     Name = name,
+                    Reference = "KC_D_S",
                     Quantity = 1,
                     UnitPrice = discount,
                     TaxRate = 0
-                });
+                }.WithDiscountCouponSubCartItem(subOrderAppliedDiscount.CouponCode));
             }
 
             return result;
@@ -398,6 +398,18 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             };
         }
 
+        public Gui GetGui()
+        {
+            var result = new Gui();
+
+            if (_klarnaSettings.DisableAutofocus)
+            {
+                result.Options = new[] { Gui.OptionDisableAutofocus };
+            }
+
+            return result;
+        }
+
         public string GetReference(Product product, ProductAttributeCombination combination)
         {
             var reference = product.Sku;
@@ -418,18 +430,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             }
 
             return reference;
-        }
-
-        public Gui GetGui()
-        {
-            var result = new Gui();
-
-            if (_klarnaSettings.DisableAutofocus)
-            {
-                result.Options = new[] {Gui.OptionDisableAutofocus};
-            }
-
-            return result;
         }
 
         public Options GetOptions()
@@ -479,7 +479,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var product = item.Product;
             var combo = _productAttributeParser.FindProductAttributeCombination(product, item.AttributesXml);
             var reference = GetReference(product, combo);
-            var name = product.GetLocalized(x => x.Name);
+            var names = _productAttributeParser.ParseProductAttributeValues(item.AttributesXml).Select(x => x.GetLocalized(a => a.Name)).ToList();
+            names.Insert(0, product.GetLocalized(x => x.Name));
+            var name = string.Join(" - ", names);
             int discountRate;
             var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate);
             var taxRate = GetIntTaxRate(item);
@@ -487,13 +489,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var result = new CartItem
             {
                 Type = CartItem.TypePhysical,
-                Reference = reference,
                 Name = name,
+                Reference = reference,
                 Quantity = item.Quantity,
                 UnitPrice = unitPrice,
                 DiscountRate = discountRate,
                 TaxRate = taxRate
-            };
+            }.WithPhysicalCartItemMerchantInfo(product.Id, item.AttributesXml);
 
             return result;
         }
