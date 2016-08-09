@@ -395,7 +395,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 Quantity = 1,
                 UnitPrice = shippingPrice,
                 TaxRate = intTaxRate
-            };
+            }.WithShippingCouponCode(appliedDiscount?.CouponCode);
         }
 
         public Gui GetGui()
@@ -483,9 +483,10 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             names.Insert(0, product.GetLocalized(x => x.Name));
             var name = string.Join(" - ", names);
             int discountRate;
-            var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate);
+            Discount appliedDiscount;
+            var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate, out appliedDiscount);
             var taxRate = GetIntTaxRate(item);
-
+            var couponCode = appliedDiscount != null && appliedDiscount.RequiresCouponCode ? appliedDiscount.CouponCode : null;
             var result = new CartItem
             {
                 Type = CartItem.TypePhysical,
@@ -495,7 +496,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 UnitPrice = unitPrice,
                 DiscountRate = discountRate,
                 TaxRate = taxRate
-            }.WithPhysicalCartItemMerchantInfo(product.Id, item.AttributesXml);
+            }.WithPhysicalCartItemMerchantInfo(product.Id, item.AttributesXml, couponCode);
 
             return result;
         }
@@ -508,10 +509,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return ConvertToCents(taxRate);
         }
 
-        private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate)
+        private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate, out Discount appliedDiscount)
         {
             decimal discountAmount;
-            Discount appliedDiscount;
             var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscount);
             discountRate = 0;
 

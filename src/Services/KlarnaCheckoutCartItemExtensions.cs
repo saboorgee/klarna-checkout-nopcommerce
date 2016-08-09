@@ -18,10 +18,21 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private const string CHECKOUT_ATTRIBUTE_PREFIX = "CheckoutAttributes_";
         private const string CHECKOUT_ATTRIBUTE_SEPARATOR = "__WithValue_";
 
-        public static CartItem WithPhysicalCartItemMerchantInfo(this CartItem item, int productId, string attributesXml)
+        public static CartItem WithShippingCouponCode(this CartItem item, string couponCode)
+        {
+            item.MerchantItemData = couponCode;
+            return item;
+        }
+
+        public static string GetCouponCodeFromShippingItem(this CartItem item)
+        {
+            return item.MerchantItemData;
+        }
+
+        public static CartItem WithPhysicalCartItemMerchantInfo(this CartItem item, int productId, string attributesXml, string couponCode)
         {
             attributesXml = attributesXml ?? "";
-            item.MerchantItemData = $"{productId}{PHYSICAL_CARTITEM_SEPARATOR}{attributesXml}";
+            item.MerchantItemData = $"{productId}{PHYSICAL_CARTITEM_SEPARATOR}{attributesXml}{PHYSICAL_CARTITEM_SEPARATOR}{couponCode}";
             return item;
         }
 
@@ -33,9 +44,16 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         public static string GetAttributesXmlFromPhysicalCartItem(this CartItem item)
         {
-            return GetValueAfterSeparator(item.MerchantItemData, PHYSICAL_CARTITEM_SEPARATOR);
+            var attributesAndCoupon = GetValueAfterSeparator(item.MerchantItemData, PHYSICAL_CARTITEM_SEPARATOR);
+            return GetValueBeforeSeparator(attributesAndCoupon, PHYSICAL_CARTITEM_SEPARATOR);
         }
 
+        public static string GetCouponCodeFromPhysicalCartItem(this CartItem item)
+        {
+            var attributesAndCoupon = GetValueAfterSeparator(item.MerchantItemData, PHYSICAL_CARTITEM_SEPARATOR);
+            var coupon = GetValueAfterSeparator(attributesAndCoupon, PHYSICAL_CARTITEM_SEPARATOR);
+            return coupon;
+        }
         public static CartItem WithGiftCardMerchantInfo(this CartItem item, int giftcardId)
         {
             item.MerchantItemData = $"{DISCOUNT_GIFTCARD_CARTITEM_SEPARATOR}{giftcardId}";
@@ -53,20 +71,20 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return item;
         }
 
-        public static string GetCouponCodeFromDiscountCouponTotalCartItem(this CartItem item)
+        public static string GetCouponCodeFromDiscountCouponCartItem(this CartItem item)
         {
-            return GetValueAfterSeparator(item.MerchantItemData, DISCOUNT_COUPON_TOTAL_CARTITEM_SEPARATOR);
+            var coupon = GetValueAfterSeparator(item.MerchantItemData, DISCOUNT_COUPON_TOTAL_CARTITEM_SEPARATOR);
+            if (string.IsNullOrWhiteSpace(coupon))
+            {
+                coupon = GetValueAfterSeparator(item.MerchantItemData, DISCOUNT_COUPON_SUB_CARTITEM_SEPARATOR);
+            }
+            return coupon;
         }
 
         public static CartItem WithDiscountCouponSubCartItem(this CartItem item, string couponCode)
         {
             item.MerchantItemData = $"{DISCOUNT_COUPON_SUB_CARTITEM_SEPARATOR}{couponCode}";
             return item;
-        }
-
-        public static string GetCouponCodeFromDiscountCouponSubCartItem(this CartItem item)
-        {
-            return GetValueAfterSeparator(item.MerchantItemData, DISCOUNT_COUPON_SUB_CARTITEM_SEPARATOR);
         }
 
         public static int GetGiftCardIdFromDiscountGiftCardCartItem(this CartItem item)

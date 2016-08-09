@@ -550,7 +550,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
         private void SyncCartWithKlarnaOrder(Customer customer, KlarnaCheckoutOrder klarnaCheckoutOrder)
         {
             var currentStoreId = _storeContext.CurrentStore.Id;
-            var couponCodePrefix = string.Format(CultureInfo.CurrentUICulture, "{0}: ", _localizationService.GetResource("shoppingcart.discountcouponcode"));
 
             var orderCurrency = _currencyService.GetCurrencyByCode(klarnaCheckoutOrder.PurchaseCurrency);
             if (orderCurrency != null)
@@ -569,11 +568,16 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             foreach (var physicalItem in physicalItems)
             {
                 AddPhysicalItemToCart(customer, physicalItem, currentStoreId);
+                var couponCode = physicalItem.GetCouponCodeFromPhysicalCartItem();
+                if (!string.IsNullOrWhiteSpace(couponCode))
+                {
+                    _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+                }
             }
 
             foreach (var coupon in appliedCoupons)
             {
-                var couponCode = coupon.Name.Substring(couponCodePrefix.Length);
+                var couponCode = coupon.GetCouponCodeFromDiscountCouponCartItem();
                 _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
             }
 
@@ -600,6 +604,11 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             foreach (var shippingItem in shippingItems)
             {
                 AddShippingItemToCart(customer, shippingItem, currentStoreId);
+                var couponCode = shippingItem.GetCouponCodeFromShippingItem();
+                if (!string.IsNullOrWhiteSpace(couponCode))
+                {
+                    _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+                }
             }
         }
 
