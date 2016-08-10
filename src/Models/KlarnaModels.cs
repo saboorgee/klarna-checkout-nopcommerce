@@ -165,7 +165,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
             address.FirstName = GivenName;
             address.LastName = FamilyName;
             address.ZipPostalCode = PostalCode;
-            address.FaxNumber = Phone;
+            address.PhoneNumber = Phone;
 
             if (country.NumericIsoCode == GERMANY)
             {

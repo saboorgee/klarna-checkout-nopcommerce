@@ -2,7 +2,7 @@
 FriendlyName: Klarna Checkout
 SystemName: Motillo.KlarnaCheckout
 Version: 1.2.0
-SupportedVersions: 3.70
+SupportedVersions: 3.80
 Author: Motillo AB
 DisplayOrder: 1
 FileName: Motillo.Nop.Plugin.KlarnaCheckout.dll

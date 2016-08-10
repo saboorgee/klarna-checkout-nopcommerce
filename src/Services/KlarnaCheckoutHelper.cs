@@ -273,13 +273,15 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             decimal orderDiscountAmount;
             List<AppliedGiftCard> appliedGiftCards;
-            Discount orderAppliedDiscount;
+            List<Discount> orderAppliedDiscounts;
             int redeemedRewardPoints;
             decimal redeemedRewardPointsAmount;
 
-            _orderTotalCalculationService.GetShoppingCartTotal(cart,
-                        out orderDiscountAmount, out orderAppliedDiscount, out appliedGiftCards,
+            var orderTotalWithDiscounts = _orderTotalCalculationService.GetShoppingCartTotal(cart,
+                        out orderDiscountAmount, out orderAppliedDiscounts, out appliedGiftCards,
                         out redeemedRewardPoints, out redeemedRewardPointsAmount);
+
+            var orderTotalWithoutTotalOrderDiscount = orderTotalWithDiscounts + orderDiscountAmount;
 
             foreach (var giftCard in appliedGiftCards)
             {
@@ -314,37 +316,49 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 }.WithRewardPointsMerchantInfo());
             }
 
-            if (orderDiscountAmount > 0)
+            if (orderTotalWithoutTotalOrderDiscount.HasValue)
             {
-                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderDiscountAmount, _workContext.WorkingCurrency);
-                var discount = ConvertToCents(amountInCurrentCurrency) * -1;
-                var name = _localizationService.GetResource("order.totaldiscount");
-
-                if (orderAppliedDiscount.RequiresCouponCode)
+                foreach (var orderAppliedDiscount in orderAppliedDiscounts)
                 {
-                    name = string.Format(CultureInfo.CurrentUICulture, "{0}: {1}", _localizationService.GetResource("shoppingcart.discountcouponcode"), orderAppliedDiscount.CouponCode);
+                    var orderAppliedDiscountAmount = orderAppliedDiscount.UsePercentage
+                        ? orderTotalWithoutTotalOrderDiscount.Value * (orderAppliedDiscount.DiscountPercentage / 100)
+                        : orderAppliedDiscount.DiscountAmount;
+
+                    var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderAppliedDiscountAmount, _workContext.WorkingCurrency);
+                    var discount = ConvertToCents(amountInCurrentCurrency) * -1;
+                    var name = _localizationService.GetResource("order.totaldiscount");
+
+                    if (orderAppliedDiscount.RequiresCouponCode)
+                    {
+                        name = string.Format(CultureInfo.CurrentUICulture, "{0}: {1}",
+                            _localizationService.GetResource("shoppingcart.discountcouponcode"),
+                            orderAppliedDiscount.CouponCode);
+                    }
+
+                    result.Add(new CartItem
+                    {
+                        Type = CartItem.TypeDiscount,
+                        Reference = $"KC_D_T{orderAppliedDiscount.Id}",
+                        Name = name,
+                        Quantity = 1,
+                        UnitPrice = discount,
+                        TaxRate = 0
+                    }.WithDiscountCouponTotalCartItem(orderAppliedDiscount.CouponCode));
+
                 }
-
-                result.Add(new CartItem
-                {
-                    Type = CartItem.TypeDiscount,
-                    Reference = "KC_D_T",
-                    Name = name,
-                    Quantity = 1,
-                    UnitPrice = discount,
-                    TaxRate = 0
-                }.WithDiscountCouponTotalCartItem(orderAppliedDiscount.CouponCode));
             }
 
             decimal subDiscountAmount;
-            Discount subOrderAppliedDiscount;
+            List<Discount> subOrderAppliedDiscounts;
             decimal subTotalWithoutDiscount;
             decimal subTotalWithDiscount;
-            _orderTotalCalculationService.GetShoppingCartSubTotal(cart, true, out subDiscountAmount, out subOrderAppliedDiscount, out subTotalWithoutDiscount, out subTotalWithDiscount);
+            _orderTotalCalculationService.GetShoppingCartSubTotal(cart, true, out subDiscountAmount, out subOrderAppliedDiscounts, out subTotalWithoutDiscount, out subTotalWithDiscount);
 
-            if (subDiscountAmount > 0)
+            foreach (var subOrderAppliedDiscount in subOrderAppliedDiscounts)
             {
-                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(subDiscountAmount, _workContext.WorkingCurrency);
+                var subOrderAppliedDiscountAmount = subOrderAppliedDiscount.UsePercentage ? subTotalWithoutDiscount * (subOrderAppliedDiscount.DiscountPercentage / 100) : subOrderAppliedDiscount.DiscountAmount;
+
+                var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(subOrderAppliedDiscountAmount, _workContext.WorkingCurrency);
                 var discount = ConvertToCents(amountInCurrentCurrency) * -1;
                 var name = _localizationService.GetResource("order.totaldiscount");
 
@@ -357,11 +371,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 {
                     Type = CartItem.TypeDiscount,
                     Name = name,
-                    Reference = "KC_D_S",
+                    Reference = $"KC_D_S_{subOrderAppliedDiscount.Id}",
                     Quantity = 1,
                     UnitPrice = discount,
                     TaxRate = 0
                 }.WithDiscountCouponSubCartItem(subOrderAppliedDiscount.CouponCode));
+
             }
 
             return result;
@@ -376,8 +391,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var intTaxRate = 0;
 
             decimal taxRate;
-            Discount appliedDiscount;
-            var shippingTotal = _orderTotalCalculationService.GetShoppingCartShippingTotal(items, true, out taxRate, out appliedDiscount);
+            List<Discount> appliedDiscounts;
+            var shippingTotal = _orderTotalCalculationService.GetShoppingCartShippingTotal(items, true, out taxRate, out appliedDiscounts);
 
             if (shippingTotal.HasValue)
             {
@@ -395,7 +410,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 Quantity = 1,
                 UnitPrice = shippingPrice,
                 TaxRate = intTaxRate
-            }.WithShippingCouponCode(appliedDiscount?.CouponCode);
+            }.WithShippingCouponCodes(appliedDiscounts.Where(x => x.RequiresCouponCode).Select(x => x.CouponCode).ToArray());
         }
 
         public Gui GetGui()
@@ -483,10 +498,10 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             names.Insert(0, product.GetLocalized(x => x.Name));
             var name = string.Join(" - ", names);
             int discountRate;
-            Discount appliedDiscount;
-            var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate, out appliedDiscount);
+            List<Discount> appliedDiscounts;
+            var unitPrice = GetIntUnitPriceAndPercentageDiscount(item, out discountRate, out appliedDiscounts);
             var taxRate = GetIntTaxRate(item);
-            var couponCode = appliedDiscount != null && appliedDiscount.RequiresCouponCode ? appliedDiscount.CouponCode : null;
+            var couponCodes = appliedDiscounts.Where(x => x.RequiresCouponCode).Select(x => x.CouponCode).ToArray();
             var result = new CartItem
             {
                 Type = CartItem.TypePhysical,
@@ -496,7 +511,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 UnitPrice = unitPrice,
                 DiscountRate = discountRate,
                 TaxRate = taxRate
-            }.WithPhysicalCartItemMerchantInfo(product.Id, item.AttributesXml, couponCode);
+            }.WithPhysicalCartItemMerchantInfo(product.Id, item.AttributesXml, couponCodes);
 
             return result;
         }
@@ -509,19 +524,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return ConvertToCents(taxRate);
         }
 
-        private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate, out Discount appliedDiscount)
+        private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate, out List<Discount> appliedDiscounts)
         {
             decimal discountAmount;
-            var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscount);
-            discountRate = 0;
-
-            // Only set discount rate if the discount uses percentage, otherwise
-            // we can't get the exact correct amount since klarna assumes 2 decimals.
-            if (appliedDiscount != null && appliedDiscount.UsePercentage)
-            {
-                unitPrice += discountAmount;
-                discountRate = ConvertToCents(appliedDiscount.DiscountPercentage);
-            }
+            var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscounts);
+            discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
+            unitPrice += discountAmount;
 
             var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(unitPrice, _workContext.WorkingCurrency);
 

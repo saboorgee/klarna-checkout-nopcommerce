@@ -559,7 +559,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             ClearDiscountsAndShippingSelection(customer, currentStoreId);
 
             var physicalItems = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypePhysical);
-            var appliedCoupons = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.HasCouponCode());
+            var appliedCoupons = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.HasOrderLevelDiscountCouponCode());
             var appliedGiftCards = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsDiscountGiftCardCartItem());
             var appliedRewardPoints = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsRewardPointsCartItem());
             var checkoutAttributes = klarnaCheckoutOrder.Cart.Items.Where(x => x.Type == CartItem.TypeDiscount && x.IsCheckoutAttribtue());
@@ -568,17 +568,18 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             foreach (var physicalItem in physicalItems)
             {
                 AddPhysicalItemToCart(customer, physicalItem, currentStoreId);
-                var couponCode = physicalItem.GetCouponCodeFromPhysicalCartItem();
-                if (!string.IsNullOrWhiteSpace(couponCode))
+                var couponCodes = physicalItem.GetCouponCodesFromPhysicalCartItem();
+                foreach (var couponCode in couponCodes)
                 {
-                    _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+                    UseCouponCode(customer, couponCode);
                 }
+
             }
 
             foreach (var coupon in appliedCoupons)
             {
                 var couponCode = coupon.GetCouponCodeFromDiscountCouponCartItem();
-                _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+                UseCouponCode(customer, couponCode);
             }
 
             foreach (var giftCardCartItem in appliedGiftCards)
@@ -604,11 +605,25 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
             foreach (var shippingItem in shippingItems)
             {
                 AddShippingItemToCart(customer, shippingItem, currentStoreId);
-                var couponCode = shippingItem.GetCouponCodeFromShippingItem();
-                if (!string.IsNullOrWhiteSpace(couponCode))
+                var couponCodes = shippingItem.GetCouponCodesFromShippingItem();
+                foreach (var couponCode in couponCodes)
                 {
-                    _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode, couponCode);
+                    UseCouponCode(customer, couponCode);
                 }
+               
+            }
+        }
+
+        private void UseCouponCode(Customer customer, string couponCode)
+        {
+            // nopCommerce currently only has support for one coupon being applied at a time. An issue has been created to fix this.
+            // This code will have to be changed when they do so.
+            // https://github.com/nopSolutions/nopCommerce/issues/1617
+
+            if (!string.IsNullOrWhiteSpace(couponCode))
+            {
+                _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.DiscountCouponCode,
+                    couponCode);
             }
         }
 
