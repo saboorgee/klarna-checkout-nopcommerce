@@ -276,7 +276,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             List<Discount> orderAppliedDiscounts;
             int redeemedRewardPoints;
             decimal redeemedRewardPointsAmount;
-
             var orderTotalWithDiscounts = _orderTotalCalculationService.GetShoppingCartTotal(cart,
                         out orderDiscountAmount, out orderAppliedDiscounts, out appliedGiftCards,
                         out redeemedRewardPoints, out redeemedRewardPointsAmount);
@@ -321,7 +320,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 foreach (var orderAppliedDiscount in orderAppliedDiscounts)
                 {
                     var orderAppliedDiscountAmount = orderAppliedDiscount.UsePercentage
-                        ? orderTotalWithoutTotalOrderDiscount.Value * (orderAppliedDiscount.DiscountPercentage / 100)
+                        ? Math.Min(orderTotalWithoutTotalOrderDiscount.Value * (orderAppliedDiscount.DiscountPercentage / 100), orderAppliedDiscount.MaximumDiscountAmount ?? decimal.MaxValue)
                         : orderAppliedDiscount.DiscountAmount;
 
                     var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderAppliedDiscountAmount, _workContext.WorkingCurrency);
@@ -356,7 +355,9 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             foreach (var subOrderAppliedDiscount in subOrderAppliedDiscounts)
             {
-                var subOrderAppliedDiscountAmount = subOrderAppliedDiscount.UsePercentage ? subTotalWithoutDiscount * (subOrderAppliedDiscount.DiscountPercentage / 100) : subOrderAppliedDiscount.DiscountAmount;
+                var subOrderAppliedDiscountAmount = subOrderAppliedDiscount.UsePercentage 
+                    ? Math.Min(subTotalWithoutDiscount * (subOrderAppliedDiscount.DiscountPercentage / 100), subOrderAppliedDiscount.MaximumDiscountAmount ?? decimal.MaxValue) 
+                    : subOrderAppliedDiscount.DiscountAmount;
 
                 var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(subOrderAppliedDiscountAmount, _workContext.WorkingCurrency);
                 var discount = ConvertToCents(amountInCurrentCurrency) * -1;
