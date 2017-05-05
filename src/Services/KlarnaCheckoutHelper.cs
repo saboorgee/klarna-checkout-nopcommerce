@@ -527,13 +527,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate, out List<Discount> appliedDiscounts)
         {
             decimal discountAmount;
-            var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscounts);
+            var unitPrice = _priceCalculationService.GetSubTotal(item, true, out discountAmount, out appliedDiscounts);
+
             discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
             unitPrice += discountAmount;
 
             var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(unitPrice, _workContext.WorkingCurrency);
 
-            return ConvertToCents(priceInCurrentCurrency);
+            return ConvertToCents(priceInCurrentCurrency / item.Quantity);
         }
 
         [DebuggerDisplay("{Country} ({PurchaseCountry}): {PurchaseCurrency}")]
