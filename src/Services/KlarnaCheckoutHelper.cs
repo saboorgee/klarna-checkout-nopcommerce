@@ -530,8 +530,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             decimal discountAmount;
             var unitPrice = _priceCalculationService.GetSubTotal(item, true, out discountAmount, out appliedDiscounts);
 
-            discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
-            unitPrice += discountAmount;
+            discountRate = 0;
+
+            if (unitPrice != decimal.Zero)
+            {
+                discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
+                unitPrice += discountAmount;
+            }
 
             var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(unitPrice, _workContext.WorkingCurrency);
 
