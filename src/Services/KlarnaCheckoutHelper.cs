@@ -280,7 +280,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                         out orderDiscountAmount, out orderAppliedDiscounts, out appliedGiftCards,
                         out redeemedRewardPoints, out redeemedRewardPointsAmount);
 
-            var orderTotalWithoutTotalOrderDiscount = orderTotalWithDiscounts + orderDiscountAmount;
+            var orderTotalWithoutTotalOrderDiscount = orderTotalWithDiscounts + orderDiscountAmount + redeemedRewardPointsAmount;
 
             foreach (var giftCard in appliedGiftCards)
             {
