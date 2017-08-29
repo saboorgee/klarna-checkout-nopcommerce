@@ -1,21 +1,20 @@
 ﻿using Motillo.Nop.Plugin.KlarnaCheckout.Controllers;
 using Motillo.Nop.Plugin.KlarnaCheckout.Data;
 using Motillo.Nop.Plugin.KlarnaCheckout.Services;
+using Nop.Core.Data;
 using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Payments;
 using Nop.Core.Infrastructure;
 using Nop.Core.Plugins;
 using Nop.Services.Localization;
+using Nop.Services.Logging;
+using Nop.Services.Orders;
 using Nop.Services.Payments;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Web.Routing;
-using Klarna.Api;
-using Nop.Core.Data;
-using Nop.Core.Domain.Payments;
-using Nop.Services.Logging;
-using Nop.Services.Orders;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout
 {
@@ -198,7 +197,14 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         public ProcessPaymentResult ProcessRecurringPayment(ProcessPaymentRequest processPaymentRequest)
         {
             var result = new ProcessPaymentResult();
-            result.AddError("Recurring payment not supported");
+
+            if (processPaymentRequest.InitialOrderId > 0)
+            {
+                var initialOrder = _orderService.GetOrderById(processPaymentRequest.InitialOrderId);
+
+                result.SubscriptionTransactionId = initialOrder.SubscriptionTransactionId;
+            }
+
             return result;
         }
 
@@ -248,7 +254,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout
         public bool SupportPartiallyRefund { get { return false; } }
         public bool SupportRefund { get { return true; } }
         public bool SupportVoid { get { return true; } }
-        public RecurringPaymentType RecurringPaymentType { get { return RecurringPaymentType.NotSupported; } }
+        public RecurringPaymentType RecurringPaymentType { get { return RecurringPaymentType.Manual; } }
         public PaymentMethodType PaymentMethodType { get { return PaymentMethodType.Standard; } }
         public bool SkipPaymentInfo { get { return false; } }
 

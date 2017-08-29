@@ -115,6 +115,7 @@
     <Compile Include="Models\ConfigurationModel.cs" />
     <Compile Include="Models\KlarnaModels.cs" />
     <Compile Include="Models\PaymentInfoModel.cs" />
+    <Compile Include="Plugins\RecurringOrderPlugin.cs" />
     <Compile Include="Plugins\OrderActivationPlugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RouteProvider.cs" />

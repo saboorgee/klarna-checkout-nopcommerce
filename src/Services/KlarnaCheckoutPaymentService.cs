@@ -14,6 +14,8 @@ using System.Text.RegularExpressions;
 using Nop.Core.Domain.Orders;
 using Nop.Services.Orders;
 using Order = Klarna.Checkout.Order;
+using System.Collections.Generic;
+using Nop.Services.Payments;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
@@ -28,6 +30,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private readonly ILogger _logger;
         private readonly KlarnaCheckoutSettings _klarnaSettings;
         private readonly IOrderService _orderService;
+        private string token;
 
         public KlarnaCheckoutPaymentService(
             IStoreContext storeContext,
@@ -85,6 +88,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                     apiOrder.Update(dictData);
 
                     order.AuthorizationTransactionId = klarnaOrder.Reservation;
+                    order.SubscriptionTransactionId = klarnaOrder.RecurringToken;
+
                     _orderService.UpdateOrder(order);
                 }
             }
@@ -101,7 +106,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
             var gui = _klarnaCheckoutUtils.GetGui();
             var options = _klarnaCheckoutUtils.GetOptions();
-            var shippingAddress = _klarnaCheckoutUtils.GetShippingAddress();
+            var shippingAddress = _klarnaCheckoutUtils.ConvertAddress();
 
             var klarnaOrder = new KlarnaCheckoutOrder
             {
@@ -109,6 +114,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 Merchant = merchant,
                 Gui = gui,
                 Options = options,
+                Recurring = _klarnaCheckoutUtils.IsRecurringShoppingCart(),
                 ShippingAddress = shippingAddress,
                 Locale = supportedLocale.Locale,
                 PurchaseCountry = supportedLocale.PurchaseCountry,
@@ -127,6 +133,40 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _klarnaRepository.Insert(kcoOrderRequest);
 
             return location;
+        }
+
+        public RecurringOrder CreateRecurring(global::Nop.Core.Domain.Orders.Order newOrder)
+        {
+            var customValues = newOrder.DeserializeCustomValues();
+            var cart = _klarnaCheckoutUtils.GetCartFromOrder(newOrder);
+            var merchant = _klarnaCheckoutUtils.GetMerchant();
+            var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale(newOrder.ShippingAddress, newOrder.CustomerCurrencyCode);
+            var shippingAddress = _klarnaCheckoutUtils.ConvertAddress(newOrder.ShippingAddress);
+            var billingAddress = _klarnaCheckoutUtils.ConvertAddress(newOrder.BillingAddress);
+            var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
+            var order = new RecurringOrder(connector, newOrder.SubscriptionTransactionId); // (string)customValues["recurring_token"]);
+
+            var klarnaOrder = new KlarnaCheckoutOrder
+            {
+                Cart = cart,
+                Merchant = merchant,
+                MerchantReference = new MerchantReference
+                {
+                    OrderId1 = newOrder.Id.ToString(CultureInfo.InvariantCulture),
+                    OrderId2 = newOrder.OrderGuid.ToString()
+                },
+                ShippingAddress = shippingAddress,
+                BillingAddress = billingAddress,
+                Locale = supportedLocale.Locale,
+                PurchaseCountry = supportedLocale.PurchaseCountry,
+                PurchaseCurrency = supportedLocale.PurchaseCurrency
+            };
+
+            var dictData = klarnaOrder.ToDictionary();
+
+            order.Create(dictData);
+
+            return order;
         }
 
         private KlarnaCheckoutEntity GetKcoOrderRequest(global::Nop.Core.Domain.Customers.Customer currentCustomer, Uri resourceUri)

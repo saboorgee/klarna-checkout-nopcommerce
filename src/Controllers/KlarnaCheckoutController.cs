@@ -29,7 +29,6 @@ using Nop.Core.Domain.Customers;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Shipping;
-using Nop.Services.Orders;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Controllers
 {

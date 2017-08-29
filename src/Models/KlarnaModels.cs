@@ -265,6 +265,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         [JsonProperty("locale", NullValueHandling = NullValueHandling.Ignore)]
         public string Locale { get; set; }
 
+        [JsonProperty("recurring", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Recurring { get; set; }
+
+        [JsonProperty("recurring_token", NullValueHandling = NullValueHandling.Ignore)]
+        public string RecurringToken { get; set; }
+
         [JsonProperty("status", NullValueHandling = NullValueHandling.Ignore)]
         public string Status { get; set; }
 

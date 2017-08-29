@@ -10,6 +10,7 @@ using Nop.Services.Common;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Orders;
+using Nop.Services.Shipping;
 using Nop.Services.Tax;
 using System;
 using System.Collections.Generic;
@@ -29,6 +30,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private readonly ILocalizationService _localizationService;
         private readonly IProductAttributeParser _productAttributeParser;
         private readonly ITaxService _taxService;
+        private readonly IShippingService _shippingService;
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly ICurrencyService _currencyService;
         private readonly IGenericAttributeService _genericAttributeService;
@@ -95,6 +97,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             ILocalizationService localizationService,
             IProductAttributeParser productAttributeParser,
             ITaxService taxService,
+            IShippingService shippingService,
             IPriceCalculationService priceCalculationService,
             ICurrencyService currencyService,
             IGenericAttributeService genericAttributeService,
@@ -108,6 +111,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             _localizationService = localizationService;
             _productAttributeParser = productAttributeParser;
             _taxService = taxService;
+            _shippingService = shippingService;
             _priceCalculationService = priceCalculationService;
             _currencyService = currencyService;
             _genericAttributeService = genericAttributeService;
@@ -133,6 +137,61 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return (int)Math.Round(value * 100, 0, MidpointRounding.AwayFromZero);
         }
 
+        public Cart GetCartFromOrder(Order order)
+        {
+            var currency = _currencyService.GetCurrencyByCode(order.CustomerCurrencyCode);
+            var cart = new Cart
+            {
+                Items = new List<CartItem>()
+            };
+
+            // Order items.
+            foreach (var orderItem in order.OrderItems)
+            {
+                var product = orderItem.Product;
+                var combo = _productAttributeParser.FindProductAttributeCombination(product, orderItem.AttributesXml);
+                var taxRate = (orderItem.UnitPriceInclTax - orderItem.UnitPriceExclTax) / orderItem.UnitPriceExclTax * 100;
+                var discountRate = (orderItem.UnitPriceExclTax - orderItem.DiscountAmountExclTax) / orderItem.UnitPriceExclTax * 100;
+
+                cart.Items.Add(new CartItem()
+                {
+                    Type = CartItem.TypePhysical,
+                    Quantity = orderItem.Quantity,
+                    Reference = GetReference(product, combo),
+                    Name = orderItem.Product.Name,
+                    UnitPrice = ConvertToCents(_currencyService.ConvertFromPrimaryStoreCurrency(orderItem.PriceInclTax, currency)),
+                    TaxRate = ConvertToCents(taxRate),
+                    DiscountRate = ConvertToCents(discountRate),
+                });
+            }
+
+            // Shipping method.
+            var shippingMethod = _shippingService.GetAllShippingMethods().FirstOrDefault(x => x.Name == order.ShippingMethod);
+            if (shippingMethod != null)
+            {
+                var kek = order.DiscountUsageHistory.Where(x => x.Discount.DiscountType == DiscountType.AssignedToShipping);
+                var shippingId = shippingMethod.Name;
+                var shippingName = shippingMethod.Name;
+                var taxRate = (order.OrderShippingInclTax - order.OrderShippingExclTax) / order.OrderShippingExclTax * 100;
+                var shippingItem = new CartItem
+                {
+                    Type = CartItem.TypeShippingFee,
+                    Reference = shippingId,
+                    Name = shippingName,
+                    Quantity = 1,
+                    UnitPrice = ConvertToCents(_currencyService.ConvertFromPrimaryStoreCurrency(order.OrderShippingInclTax, currency)),
+                    TaxRate = ConvertToCents(taxRate),
+                }; // TODO ? Use .WithShippingCouponCodes(appliedDiscounts.Where(x => x.RequiresCouponCode).Select(x => x.CouponCode).ToArray());
+
+                cart.Items.Add(shippingItem);
+            }
+
+            // Applied discounts.
+            //var discounts = order.DiscountUsageHistory.sel
+
+            return cart;
+        }
+
         public Cart GetCart()
         {
             var storeId = _storeContext.CurrentStore.Id;
@@ -153,6 +212,18 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             {
                 Items = items
             };
+        }
+
+        public bool IsRecurringShoppingCart()
+        {
+            var storeId = _storeContext.CurrentStore.Id;
+            var customer = _workContext.CurrentCustomer;
+            var cartItems = customer.ShoppingCartItems
+                .Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart)
+                .LimitPerStore(storeId)
+                .ToList();
+
+            return cartItems.IsRecurring();
         }
 
         private IEnumerable<CartItem> GetCheckoutAttributeItems()
@@ -220,9 +291,15 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return cartItems;
         }
 
-        public Address GetShippingAddress()
+        public Address ConvertAddress()
         {
             var address = _workContext.CurrentCustomer.ShippingAddress;
+
+            return ConvertAddress(address);
+        }
+
+        public Address ConvertAddress(global::Nop.Core.Domain.Common.Address address)
+        {
             if (address == null)
             {
                 return null;
@@ -240,19 +317,37 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 result.PostalCode = address.ZipPostalCode;
             }
 
+            result.City = address.City;
+
+            if (address.Country != null)
+            {
+                result.Country = address.Country.TwoLetterIsoCode;
+            }
+            result.StreetAddress = address.Address1;
+            result.Phone = address.PhoneNumber;
+            result.GivenName = address.FirstName;
+            result.FamilyName = address.LastName;
+
             return result;
         }
+
         public SupportedLocale GetSupportedLocale()
         {
-            var language = _workContext.WorkingLanguage.LanguageCulture.ToLowerInvariant();
             var currency = _workContext.WorkingCurrency.CurrencyCode.ToUpperInvariant();
             var customer = _workContext.CurrentCustomer;
+
+            return GetSupportedLocale(customer.ShippingAddress, currency);
+        }
+
+        public SupportedLocale GetSupportedLocale(global::Nop.Core.Domain.Common.Address shippingAddress, string currency)
+        {
+            var language = _workContext.WorkingLanguage.LanguageCulture.ToLowerInvariant();
             var enabledCountries = (_klarnaSettings.EnabledCountries ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             string purchaseCountry;
 
-            if (customer.ShippingAddress != null && customer.ShippingAddress.Country != null)
+            if (shippingAddress != null && shippingAddress.Country != null)
             {
-                purchaseCountry = customer.ShippingAddress.Country.TwoLetterIsoCode;
+                purchaseCountry = shippingAddress.Country.TwoLetterIsoCode;
             }
             else
             {
@@ -276,11 +371,12 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             List<Discount> orderAppliedDiscounts;
             int redeemedRewardPoints;
             decimal redeemedRewardPointsAmount;
+
             var orderTotalWithDiscounts = _orderTotalCalculationService.GetShoppingCartTotal(cart,
                         out orderDiscountAmount, out orderAppliedDiscounts, out appliedGiftCards,
                         out redeemedRewardPoints, out redeemedRewardPointsAmount);
 
-            var orderTotalWithoutTotalOrderDiscount = orderTotalWithDiscounts + orderDiscountAmount + redeemedRewardPointsAmount;
+            var orderTotalWithoutTotalOrderDiscount = orderTotalWithDiscounts + orderDiscountAmount;
 
             foreach (var giftCard in appliedGiftCards)
             {
@@ -320,7 +416,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 foreach (var orderAppliedDiscount in orderAppliedDiscounts)
                 {
                     var orderAppliedDiscountAmount = orderAppliedDiscount.UsePercentage
-                        ? Math.Min(orderTotalWithoutTotalOrderDiscount.Value * (orderAppliedDiscount.DiscountPercentage / 100), orderAppliedDiscount.MaximumDiscountAmount ?? decimal.MaxValue)
+                        ? orderTotalWithoutTotalOrderDiscount.Value * (orderAppliedDiscount.DiscountPercentage / 100)
                         : orderAppliedDiscount.DiscountAmount;
 
                     var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(orderAppliedDiscountAmount, _workContext.WorkingCurrency);
@@ -528,19 +624,13 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
         private int GetIntUnitPriceAndPercentageDiscount(ShoppingCartItem item, out int discountRate, out List<Discount> appliedDiscounts)
         {
             decimal discountAmount;
-            var unitPrice = _priceCalculationService.GetSubTotal(item, true, out discountAmount, out appliedDiscounts);
-
-            discountRate = 0;
-
-            if (unitPrice != decimal.Zero)
-            {
-                discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
-                unitPrice += discountAmount;
-            }
+            var unitPrice = _priceCalculationService.GetUnitPrice(item, true, out discountAmount, out appliedDiscounts);
+            discountRate = ConvertToCents(discountAmount / (unitPrice + discountAmount) * 100);
+            unitPrice += discountAmount;
 
             var priceInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(unitPrice, _workContext.WorkingCurrency);
 
-            return ConvertToCents(priceInCurrentCurrency / item.Quantity);
+            return ConvertToCents(priceInCurrentCurrency);
         }
 
         [DebuggerDisplay("{Country} ({PurchaseCountry}): {PurchaseCurrency}")]
