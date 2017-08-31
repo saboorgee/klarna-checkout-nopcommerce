@@ -5,17 +5,15 @@ using Motillo.Nop.Plugin.KlarnaCheckout.Models;
 using Newtonsoft.Json;
 using Nop.Core;
 using Nop.Core.Data;
+using Nop.Core.Domain.Orders;
 using Nop.Services.Customers;
 using Nop.Services.Logging;
+using Nop.Services.Orders;
+using Nop.Services.Payments;
 using System;
 using System.Globalization;
 using System.Linq;
-using System.Text.RegularExpressions;
-using Nop.Core.Domain.Orders;
-using Nop.Services.Orders;
 using Order = Klarna.Checkout.Order;
-using System.Collections.Generic;
-using Nop.Services.Payments;
 
 namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 {
@@ -107,6 +105,7 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             var gui = _klarnaCheckoutUtils.GetGui();
             var options = _klarnaCheckoutUtils.GetOptions();
             var shippingAddress = _klarnaCheckoutUtils.ConvertAddress();
+            var isRecurring = _klarnaCheckoutUtils.IsRecurringShoppingCart();
 
             var klarnaOrder = new KlarnaCheckoutOrder
             {
@@ -114,12 +113,20 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 Merchant = merchant,
                 Gui = gui,
                 Options = options,
-                Recurring = _klarnaCheckoutUtils.IsRecurringShoppingCart(),
+                Recurring = isRecurring,
                 ShippingAddress = shippingAddress,
                 Locale = supportedLocale.Locale,
                 PurchaseCountry = supportedLocale.PurchaseCountry,
                 PurchaseCurrency = supportedLocale.PurchaseCurrency
             };
+
+            // Reccuring orders also need to set "subscriptions" and "customer_account_info".
+            if (isRecurring)
+            {
+                var emdRecurring = _klarnaCheckoutUtils.GetEmdForRecurringOrder();
+
+                klarnaOrder.SetExtendedMerchantData(emdRecurring);
+            }
 
             var dictData = klarnaOrder.ToDictionary();
             var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
@@ -211,15 +218,25 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
                 var options = _klarnaCheckoutUtils.GetOptions();
                 var connector = Connector.Create(_klarnaSettings.SharedSecret, BaseUri);
                 var supportedLocale = _klarnaCheckoutUtils.GetSupportedLocale();
+                var isRecurring = _klarnaCheckoutUtils.IsRecurringShoppingCart();
 
                 var klarnaOrder = new KlarnaCheckoutOrder
                 {
                     Cart = cart,
                     Options = options,
+                    Recurring = isRecurring,
                     Locale = supportedLocale.Locale,
                     PurchaseCountry = supportedLocale.PurchaseCountry,
                     PurchaseCurrency = supportedLocale.PurchaseCurrency
                 };
+
+                // Reccuring orders also need to set "subscriptions" and "customer_account_info".
+                if (isRecurring)
+                {
+                    var emdRecurring = _klarnaCheckoutUtils.GetEmdForRecurringOrder();
+
+                    klarnaOrder.SetExtendedMerchantData(emdRecurring);
+                }
 
                 var order = new Order(connector, klarnaOrderId);
                 var dictData = klarnaOrder.ToDictionary();

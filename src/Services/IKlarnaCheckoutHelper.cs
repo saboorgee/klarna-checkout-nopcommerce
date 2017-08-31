@@ -21,5 +21,6 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
         Gui GetGui();
         Options GetOptions();
+        Dictionary<string, object> GetEmdForRecurringOrder();
     }
 }

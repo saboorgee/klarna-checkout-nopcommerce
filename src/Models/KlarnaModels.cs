@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Infrastructure;
 using Nop.Services.Directory;
@@ -246,6 +247,38 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
         public string OrderId2 { get; set; }
     }
 
+    [DebuggerDisplay("{SubscriptionName}")]
+    public class Subscription
+    {
+        [JsonProperty("subscription_name", NullValueHandling = NullValueHandling.Ignore)]
+        public string SubscriptionName { get; set; }
+
+        [JsonProperty("start_time")]
+        public DateTime StartTime { get; set; }
+
+        [JsonProperty("end_time")]
+        public DateTime EndTime { get; set; }
+
+        [JsonProperty("auto_renewal_of_subscription")]
+        public bool AutoRenewalOfSubscription { get; set; }
+
+        [JsonProperty("affiliate_name", NullValueHandling = NullValueHandling.Ignore)]
+        public string AffiliateName { get; set; }
+    }
+
+    [DebuggerDisplay("{UniqueAccountIdentifier}")]
+    public class CustomerAccountInfo
+    {
+        [JsonProperty("unique_account_identifier", NullValueHandling = NullValueHandling.Ignore)]
+        public string UniqueAccountIdentifier { get; set; }
+
+        [JsonProperty("account_registration_date")]
+        public DateTime AccountRegistrationDate { get; set; }
+
+        [JsonProperty("account_last_modified")]
+        public DateTime AccountLastModified { get; set; }
+    }
+
     [DebuggerDisplay("{Id}: {Status}")]
     public class KlarnaCheckoutOrder
     {
@@ -309,6 +342,22 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Models
 
         [JsonProperty("merchant", NullValueHandling = NullValueHandling.Ignore)]
         public Merchant Merchant { get; set; }
+
+        [JsonProperty("attachment", NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<string, string> Attachment { get; set; }
+
+        public void SetExtendedMerchantData(Dictionary<string, object> emd)
+        {
+            Attachment = new Dictionary<string, string>
+                {
+                    { "content_type", "application/vnd.klarna.internal.emd-v2+json"},
+                    { "body", JsonConvert.SerializeObject(emd, new IsoDateTimeConverter
+                      {
+                          DateTimeFormat = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'"
+                      })
+                    }
+                };
+        }
 
         public Dictionary<string, object> ToDictionary()
         {

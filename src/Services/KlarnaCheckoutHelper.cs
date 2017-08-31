@@ -226,6 +226,47 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
             return cartItems.IsRecurring();
         }
 
+        public Dictionary<string, object> GetEmdForRecurringOrder()
+        {
+            var storeId = _storeContext.CurrentStore.Id;
+            var customer = _workContext.CurrentCustomer;
+            var recurringItems = customer.ShoppingCartItems
+                .Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart && x.Product != null && x.Product.IsRecurring)
+                .LimitPerStore(storeId)
+                .ToList();
+            var subscriptions = new List<Subscription>();
+
+            foreach (var item in recurringItems)
+            {
+                subscriptions.Add(new Subscription
+                {
+                    SubscriptionName = item.Product.GetLocalized(x => x.Name),
+                    StartTime = DateTime.Now,
+                    EndTime = DateTime.Now.AddYears(1),
+                    AutoRenewalOfSubscription = true,
+                    AffiliateName = string.Empty,
+                });
+            }
+
+            var customerAccountInfos = new List<CustomerAccountInfo>
+            {
+                new CustomerAccountInfo
+                {
+                    UniqueAccountIdentifier = customer.Id.ToString(),
+                    AccountRegistrationDate = customer.CreatedOnUtc,
+                    AccountLastModified = customer.LastActivityDateUtc,
+                }
+            };
+
+            var emd = new Dictionary<string, object>
+            {
+                { "subscription", subscriptions},
+                { "customer_account_info", customerAccountInfos}
+            };
+
+            return emd;
+        }
+
         private IEnumerable<CartItem> GetCheckoutAttributeItems()
         {
             var result = new List<CartItem>();
@@ -451,8 +492,8 @@ namespace Motillo.Nop.Plugin.KlarnaCheckout.Services
 
             foreach (var subOrderAppliedDiscount in subOrderAppliedDiscounts)
             {
-                var subOrderAppliedDiscountAmount = subOrderAppliedDiscount.UsePercentage 
-                    ? Math.Min(subTotalWithoutDiscount * (subOrderAppliedDiscount.DiscountPercentage / 100), subOrderAppliedDiscount.MaximumDiscountAmount ?? decimal.MaxValue) 
+                var subOrderAppliedDiscountAmount = subOrderAppliedDiscount.UsePercentage
+                    ? Math.Min(subTotalWithoutDiscount * (subOrderAppliedDiscount.DiscountPercentage / 100), subOrderAppliedDiscount.MaximumDiscountAmount ?? decimal.MaxValue)
                     : subOrderAppliedDiscount.DiscountAmount;
 
                 var amountInCurrentCurrency = _currencyService.ConvertFromPrimaryStoreCurrency(subOrderAppliedDiscountAmount, _workContext.WorkingCurrency);
